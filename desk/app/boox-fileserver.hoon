@@ -207,17 +207,11 @@
   =+  !<(=mime (tube file))
   =/  content-type=@t  (rsh 3^1 (spat p.mime))
   =/  cache-val=@t
-    ?+  u.ext  'max-age=3600'
-      %css  'max-age=3600'
-      %js   ?:  =('sw' (rear (slag (lent woot) site)))
-              'no-cache'
-            'max-age=3600'
+    ?+  u.ext  'no-cache'
       %svg  'max-age=86400'
       %png  'max-age=86400'
       %jpg  'max-age=86400'
       %ico  'max-age=86400'
-      %html  'no-cache'
-      %json  'no-cache'
     ==
   :_  `q.mime
   [200 ['content-type' content-type] ['cache-control' cache-val] ~]
