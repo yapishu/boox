@@ -1,4 +1,4 @@
-:~  title+'Boox'
+:~  title+'boox'
     info+'An ebook reader and library manager'
     color+0x4a.3728
     version+[0 1 0]
