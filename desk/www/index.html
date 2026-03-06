@@ -6,6 +6,10 @@
   <title>Boox</title>
   <link rel="icon" type="image/svg+xml" href="/apps/boox/icon.svg">
   <link rel="manifest" href="/apps/boox/manifest.json">
+  <!-- Fonts (matching Alex) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Serif:wght@300;400;500&display=swap" rel="stylesheet">
   <!-- epub.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
@@ -15,17 +19,25 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
-  <link rel="stylesheet" href="/apps/boox/css/app.css?v=8">
+  <!-- Theme: apply before render to avoid flash -->
+  <script>
+    (function() {
+      var t = localStorage.getItem('boox-theme');
+      if (t === 'light') document.documentElement.classList.add('light');
+      else document.documentElement.classList.add('dark');
+    })();
+  </script>
+  <link rel="stylesheet" href="/apps/boox/css/app.css?v=9">
 </head>
 <body>
   <div id="app">
-    <div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#9a9a9a">
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text-secondary)">
       Loading...
     </div>
   </div>
-  <script src="/apps/boox/js/api.js?v=8"></script>
-  <script src="/apps/boox/js/s3.js?v=8"></script>
-  <script src="/apps/boox/js/reader.js?v=8"></script>
-  <script src="/apps/boox/js/app.js?v=8"></script>
+  <script src="/apps/boox/js/api.js?v=9"></script>
+  <script src="/apps/boox/js/s3.js?v=9"></script>
+  <script src="/apps/boox/js/reader.js?v=9"></script>
+  <script src="/apps/boox/js/app.js?v=9"></script>
 </body>
 </html>

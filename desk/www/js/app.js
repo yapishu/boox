@@ -1,19 +1,22 @@
-// Boox - main application
+// Boox - main application (Alex-inspired design)
 
 const App = {
   state: {
     books: [],
-    view: 'library',    // library | reader | settings | upload
+    view: 'library',
     currentBook: null,
     readerControls: null,
     s3Config: null,
     searchQuery: '',
     filterFormat: '',
+    filterStatus: '',
+    sortBy: 'recent',
     collections: {},
-    activeCollection: null
+    theme: localStorage.getItem('boox-theme') || 'dark',
   },
 
   async init() {
+    this.applyTheme();
     await this.loadBooks();
     await this.loadS3Config();
     this.render();
@@ -21,11 +24,27 @@ const App = {
     window.addEventListener('boox-state-changed', () => this.loadBooks().then(() => {
       if (this.state.view === 'library') this.renderLibrary();
     }));
-    // Handle back button
     window.addEventListener('popstate', () => {
       if (this.state.view === 'reader') this.showLibrary();
     });
   },
+
+  // ── Theme ──
+
+  applyTheme() {
+    document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.classList.add(this.state.theme);
+  },
+
+  toggleTheme() {
+    this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('boox-theme', this.state.theme);
+    this.applyTheme();
+    const btn = document.getElementById('theme-toggle');
+    if (btn) btn.textContent = this.state.theme === 'dark' ? '\u263E' : '\u2600';
+  },
+
+  // ── Data ──
 
   async loadBooks() {
     try {
@@ -53,6 +72,8 @@ const App = {
     }
   },
 
+  // ── Events ──
+
   bindEvents() {
     document.addEventListener('keydown', (e) => {
       if (this.state.view !== 'reader') return;
@@ -64,70 +85,139 @@ const App = {
         e.preventDefault();
         if (this.state.readerControls?.prev) this.state.readerControls.prev();
       }
-      if (e.key === 'Escape') {
-        this.showLibrary();
-      }
+      if (e.key === 'Escape') this.showLibrary();
     });
   },
+
+  // ── Main render ──
 
   render() {
     const app = document.getElementById('app');
     app.innerHTML = `
-      <header class="app-header" id="app-header">
-        <div class="header-left">
-          <h1 class="logo" onclick="App.showLibrary()">boox</h1>
-        </div>
-        <div class="header-center">
-          <div class="search-bar">
-            <input type="text" id="search-input" placeholder="Search library..."
-                   value="${this.state.searchQuery}"
-                   oninput="App.onSearch(this.value)">
+      <div class="dashboard" id="dashboard">
+        <div class="topbar" id="topbar">
+          <div class="topbar-left">
+            <span class="logo" onclick="App.showLibrary()">boox</span>
+          </div>
+          <div class="topbar-right">
+            <div class="search-wrap">
+              <span class="search-icon">\u2315</span>
+              <input type="text" class="search-input" id="search-input"
+                     placeholder="Search library..."
+                     value="${this.escapeHtml(this.state.searchQuery)}"
+                     oninput="App.onSearch(this.value)">
+            </div>
+            <button class="theme-toggle" id="theme-toggle"
+                    onclick="App.toggleTheme()"
+                    title="Toggle theme">${this.state.theme === 'dark' ? '\u263E' : '\u2600'}</button>
           </div>
         </div>
-        <div class="header-right">
-          <select id="format-filter" onchange="App.onFilterFormat(this.value)">
-            <option value="">All formats</option>
-            <option value="epub">EPUB</option>
-            <option value="pdf">PDF</option>
-            <option value="mobi">MOBI</option>
-            <option value="txt">TXT</option>
-            <option value="md">MD</option>
-            <option value="html">HTML</option>
-          </select>
-          <button class="btn btn-primary" onclick="App.showUpload()">Upload</button>
-          <button class="btn" onclick="App.showSettings()">Settings</button>
+
+        <div id="filters-bar"></div>
+
+        <div class="content" id="main-content">
+          <div id="library-view"></div>
+          <div id="upload-view" class="hidden"></div>
+          <div id="settings-view" class="hidden"></div>
         </div>
-      </header>
-      <main id="main-content">
-        <div id="library-view" class="library-view"></div>
+
         <div id="reader-view" class="reader-view hidden">
           <div class="reader-toolbar" id="reader-toolbar">
-            <button class="btn btn-sm" onclick="App.showLibrary()">Back</button>
-            <button class="btn btn-sm" onclick="Reader.toggleChapterList()" title="Chapters">&#9776;</button>
-            <span id="reader-title"></span>
-            <span id="page-indicator"></span>
-            <div class="reader-nav">
-              <button class="btn btn-sm" onclick="Reader.toggleSettingsPanel()" title="Font settings">Aa</button>
-              <button class="btn btn-sm" onclick="App.readerPrev()">Prev</button>
-              <button class="btn btn-sm" onclick="App.readerNext()">Next</button>
+            <div class="reader-toolbar-left">
+              <button class="btn btn-ghost btn-sm" onclick="App.showLibrary()">\u2190 Back</button>
+              <button class="btn btn-ghost btn-sm" onclick="Reader.toggleChapterList()" title="Chapters">\u2630</button>
+              <span id="reader-title"></span>
+            </div>
+            <div class="reader-toolbar-center">
+              <div class="progress-meter" id="progress-meter">
+                <div class="progress-meter-bar">
+                  <div class="progress-meter-fill" id="progress-meter-fill" style="width:0%"></div>
+                </div>
+                <span class="progress-meter-text" id="progress-meter-text">0%</span>
+              </div>
+            </div>
+            <div class="reader-toolbar-right">
+              <button class="btn btn-ghost btn-sm" onclick="App.readerPrev()" title="Previous">\u2190</button>
+              <button class="btn btn-ghost btn-sm" onclick="App.readerNext()" title="Next">\u2192</button>
+              <button class="btn btn-ghost btn-sm" onclick="Reader.toggleSettingsPanel()" title="Font settings">Aa</button>
             </div>
           </div>
           <div id="reader-container" class="reader-container"></div>
         </div>
-        <div id="settings-view" class="settings-view hidden"></div>
-        <div id="upload-view" class="upload-view hidden"></div>
-      </main>
+      </div>
+
+      <nav class="floating-nav" id="floating-nav">
+        <button class="nav-item active" onclick="App.showLibrary()" data-view="library">
+          <span class="nav-icon">\u{1F4DA}</span> Library
+        </button>
+        <button class="nav-item" onclick="App.showUpload()" data-view="upload">
+          <span class="nav-icon">\u2191</span> Upload
+        </button>
+        <button class="nav-item" onclick="App.showSettings()" data-view="settings">
+          <span class="nav-icon">\u2699</span> Settings
+        </button>
+      </nav>
     `;
+    this.renderFilters();
     this.renderLibrary();
   },
 
-  renderLibrary() {
-    const container = document.getElementById('library-view');
-    if (!container) return;
+  setActiveNav(view) {
+    document.querySelectorAll('.nav-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.view === view);
+    });
+  },
 
-    let books = this.state.books;
+  // ── Filters ──
 
-    // Apply search filter
+  renderFilters() {
+    const bar = document.getElementById('filters-bar');
+    if (!bar) return;
+    bar.innerHTML = `
+      <div class="filters">
+        <div class="filter-group">
+          ${['', 'epub', 'pdf', 'mobi', 'txt'].map(f =>
+            `<button class="filter-pill ${this.state.filterFormat === f ? 'active' : ''}"
+                    onclick="App.setFilter('format','${f}')">${f ? f.toUpperCase() : 'All'}</button>`
+          ).join('')}
+        </div>
+        <div class="filter-group">
+          ${[['', 'All'], ['reading', 'Reading'], ['completed', 'Done'], ['not_started', 'New']].map(([v, l]) =>
+            `<button class="filter-pill ${this.state.filterStatus === v ? 'active' : ''}"
+                    onclick="App.setFilter('status','${v}')">${l}</button>`
+          ).join('')}
+        </div>
+        <div class="filters-right">
+          <select class="sort-select" onchange="App.setFilter('sort', this.value)">
+            <option value="recent" ${this.state.sortBy === 'recent' ? 'selected' : ''}>Recent</option>
+            <option value="title" ${this.state.sortBy === 'title' ? 'selected' : ''}>Title</option>
+            <option value="author" ${this.state.sortBy === 'author' ? 'selected' : ''}>Author</option>
+          </select>
+        </div>
+      </div>
+    `;
+  },
+
+  setFilter(type, value) {
+    if (type === 'format') this.state.filterFormat = value;
+    else if (type === 'status') this.state.filterStatus = value;
+    else if (type === 'sort') this.state.sortBy = value;
+    this.renderFilters();
+    this.renderLibrary();
+  },
+
+  // ── Library ──
+
+  getBookStatus(book) {
+    const p = book.position ? book.position.progress : 0;
+    if (p >= 100) return 'completed';
+    if (p > 0) return 'reading';
+    return 'not_started';
+  },
+
+  getFilteredBooks() {
+    let books = [...this.state.books];
+
     if (this.state.searchQuery) {
       const q = this.state.searchQuery.toLowerCase();
       books = books.filter(b =>
@@ -137,85 +227,150 @@ const App = {
       );
     }
 
-    // Apply format filter
     if (this.state.filterFormat) {
       books = books.filter(b => b.format === this.state.filterFormat);
     }
 
-    if (books.length === 0) {
+    if (this.state.filterStatus) {
+      books = books.filter(b => this.getBookStatus(b) === this.state.filterStatus);
+    }
+
+    if (this.state.sortBy === 'title') {
+      books.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (this.state.sortBy === 'author') {
+      books.sort((a, b) => (a.author || '').localeCompare(b.author || ''));
+    }
+
+    return books;
+  },
+
+  renderLibrary() {
+    const container = document.getElementById('library-view');
+    if (!container) return;
+
+    const books = this.getFilteredBooks();
+    const readingBooks = this.state.books.filter(b => this.getBookStatus(b) === 'reading');
+
+    if (this.state.books.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-icon">&#128218;</div>
+          <div class="empty-icon">\u{1F4DA}</div>
           <h2>Your library is empty</h2>
-          <p>${this.state.books.length === 0
-            ? 'Upload some books to get started.'
-            : 'No books match your search.'}</p>
-          ${this.state.books.length === 0
-            ? '<button class="btn btn-primary btn-lg" onclick="App.showUpload()">Upload your first book</button>'
-            : ''}
+          <p>Upload some books to get started.</p>
+          <button class="btn btn-primary" onclick="App.showUpload()">Upload your first book</button>
         </div>
       `;
       return;
     }
 
-    container.innerHTML = `
-      <div class="book-grid">
-        ${books.map(book => this.renderBookCard(book)).join('')}
+    let html = '';
+
+    // Now Reading shelf
+    if (readingBooks.length > 0 && !this.state.searchQuery && !this.state.filterFormat && !this.state.filterStatus) {
+      html += `
+        <div style="margin-bottom: 0.5rem;">
+          <div class="section-label">Now Reading</div>
+          <div class="now-reading-shelf">
+            ${readingBooks.map(book => this.renderNowReadingCard(book)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Main grid
+    if (books.length === 0) {
+      html += `
+        <div class="empty-state">
+          <p>No books match your filters.</p>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="section-label">${books.length} book${books.length !== 1 ? 's' : ''}</div>
+        <div class="book-grid">
+          ${books.map(book => this.renderBookCard(book)).join('')}
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+  },
+
+  renderNowReadingCard(book) {
+    const progress = book.position ? book.position.progress : 0;
+    const coverStyle = book['cover-url']
+      ? `background-image: url('${this.escapeHtml(book['cover-url'])}')`
+      : '';
+
+    return `
+      <div class="now-reading-card" onclick="App.openBook('${book.id}')">
+        <div class="now-reading-cover" style="${coverStyle}">
+          ${!book['cover-url'] ? `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:0.6rem;color:var(--text-muted);padding:0.25rem;text-align:center">${this.escapeHtml(book.title).slice(0, 20)}</div>` : ''}
+        </div>
+        <div class="now-reading-info">
+          <div class="now-reading-title">${this.escapeHtml(book.title)}</div>
+          <div class="now-reading-author">${this.escapeHtml(book.author || 'Unknown')}</div>
+          <div class="now-reading-progress">
+            <div class="progress-bar" style="flex:1">
+              <div class="progress-fill" style="width:${progress}%"></div>
+            </div>
+            <span class="progress-text">${progress}%</span>
+          </div>
+        </div>
       </div>
     `;
   },
 
   renderBookCard(book) {
+    const status = this.getBookStatus(book);
     const progress = book.position ? book.position.progress : 0;
-    const coverStyle = book['cover-url']
-      ? `background-image: url('${book['cover-url']}')`
-      : '';
-    const formatColors = {
-      epub: '#4a9eff', pdf: '#ff4a4a', mobi: '#ff9f43',
-      txt: '#7bed9f', md: '#a29bfe', html: '#fd79a8'
-    };
-    const color = formatColors[book.format] || '#ddd';
+    const hasCover = !!book['cover-url'];
+
+    let statusBadge = '';
+    if (status === 'reading') {
+      statusBadge = '<span class="card-badge badge-reading">Reading</span>';
+    } else if (status === 'completed') {
+      statusBadge = '<span class="card-badge badge-completed">Done</span>';
+    }
 
     return `
       <div class="book-card" onclick="App.openBook('${book.id}')">
-        <div class="book-cover" style="${coverStyle}">
-          ${!book['cover-url'] ? `
-            <div class="book-cover-placeholder">
-              <span class="cover-title">${this.escapeHtml(book.title)}</span>
-              <span class="cover-author">${this.escapeHtml(book.author)}</span>
+        <div class="book-cover" ${hasCover ? `style="background:none"` : ''}>
+          ${hasCover
+            ? `<img class="cover-img" src="${this.escapeHtml(book['cover-url'])}" alt="" loading="lazy">`
+            : `<div class="book-cover-placeholder">
+                <span class="cover-title">${this.escapeHtml(book.title)}</span>
+                <span class="cover-author">${this.escapeHtml(book.author || '')}</span>
+              </div>`
+          }
+          ${statusBadge}
+          <span class="card-badge badge-format fmt-${book.format}">${book.format.toUpperCase()}</span>
+          ${status === 'reading' ? `
+            <div class="card-progress">
+              <div class="card-progress-fill" style="width:${progress}%"></div>
             </div>
           ` : ''}
-          <span class="format-badge" style="background:${color}">${book.format.toUpperCase()}</span>
         </div>
-        <div class="book-info">
-          <h3 class="book-title">${this.escapeHtml(book.title)}</h3>
-          <p class="book-author">${this.escapeHtml(book.author || 'Unknown')}</p>
-          ${progress > 0 ? `
-            <div class="progress-bar">
-              <div class="progress-fill" style="width:${progress}%"></div>
-            </div>
-            <span class="progress-text">${progress}%</span>
-          ` : ''}
+        <div class="card-meta">
+          <div class="card-title">${this.escapeHtml(book.title)}</div>
+          <div class="card-author">${this.escapeHtml(book.author || 'Unknown')}</div>
         </div>
-        <button class="book-menu-btn" onclick="event.stopPropagation(); App.showBookMenu('${book.id}', event)">&#8942;</button>
+        <button class="card-menu-btn" onclick="event.stopPropagation(); App.showBookMenu('${book.id}', event)">&#8942;</button>
       </div>
     `;
   },
 
   showBookMenu(bookId, event) {
-    // Remove existing menu
-    document.querySelectorAll('.book-context-menu').forEach(m => m.remove());
-
+    document.querySelectorAll('.context-menu').forEach(m => m.remove());
     const menu = document.createElement('div');
-    menu.className = 'book-context-menu';
+    menu.className = 'context-menu';
     menu.innerHTML = `
       <button onclick="App.editBook('${bookId}')">Edit metadata</button>
-      <button onclick="App.confirmDeleteBook('${bookId}')">Delete book</button>
+      <button onclick="App.confirmDeleteBook('${bookId}')" style="color:var(--danger)">Delete</button>
     `;
     menu.style.left = event.clientX + 'px';
     menu.style.top = event.clientY + 'px';
     document.body.appendChild(menu);
-
     setTimeout(() => {
       document.addEventListener('click', function handler() {
         menu.remove();
@@ -223,6 +378,40 @@ const App = {
       });
     }, 10);
   },
+
+  // ── Views ──
+
+  hideAllViews() {
+    document.getElementById('library-view')?.classList.add('hidden');
+    document.getElementById('reader-view')?.classList.add('hidden');
+    document.getElementById('settings-view')?.classList.add('hidden');
+    document.getElementById('upload-view')?.classList.add('hidden');
+  },
+
+  showDashboard() {
+    document.getElementById('dashboard')?.classList.remove('hidden');
+    document.getElementById('floating-nav')?.classList.remove('hidden');
+    document.getElementById('topbar')?.classList.remove('hidden');
+    document.getElementById('filters-bar')?.classList.remove('hidden');
+  },
+
+  hideDashboard() {
+    document.getElementById('topbar')?.classList.add('hidden');
+    document.getElementById('floating-nav')?.classList.add('hidden');
+    document.getElementById('filters-bar')?.classList.add('hidden');
+  },
+
+  showLibrary() {
+    this.state.view = 'library';
+    Reader.close();
+    this.showDashboard();
+    this.hideAllViews();
+    document.getElementById('library-view').classList.remove('hidden');
+    this.setActiveNav('library');
+    this.renderLibrary();
+  },
+
+  // ── Reader ──
 
   async openBook(bookId) {
     const book = this.state.books.find(b => b.id === bookId);
@@ -232,10 +421,13 @@ const App = {
     this.state.view = 'reader';
     history.pushState({ view: 'reader' }, '');
 
+    this.hideDashboard();
     this.hideAllViews();
     document.getElementById('reader-view').classList.remove('hidden');
-    document.getElementById('app-header').classList.add('hidden');
     document.getElementById('reader-title').textContent = book.title;
+
+    // Reset progress meter
+    this.updateProgressMeter(book.position ? book.position.progress : 0);
 
     try {
       this.state.readerControls = await Reader.open(book);
@@ -246,36 +438,31 @@ const App = {
     }
   },
 
-  hideAllViews() {
-    document.getElementById('library-view').classList.add('hidden');
-    document.getElementById('reader-view').classList.add('hidden');
-    document.getElementById('settings-view').classList.add('hidden');
-    document.getElementById('upload-view').classList.add('hidden');
-  },
-
-  showLibrary() {
-    this.state.view = 'library';
-    Reader.close();
-    this.hideAllViews();
-    document.getElementById('library-view').classList.remove('hidden');
-    document.getElementById('app-header').classList.remove('hidden');
-    this.renderLibrary();
+  updateProgressMeter(pct) {
+    const fill = document.getElementById('progress-meter-fill');
+    const text = document.getElementById('progress-meter-text');
+    if (fill) fill.style.width = pct + '%';
+    if (text) text.textContent = pct + '%';
   },
 
   readerPrev() {
     if (this.state.readerControls?.prev) this.state.readerControls.prev();
   },
-
   readerNext() {
     if (this.state.readerControls?.next) this.state.readerControls.next();
   },
+
+  // ── Upload ──
 
   showUpload() {
     this.state.view = 'upload';
     this._pendingFile = null;
     this._pendingCoverFile = null;
+    this.showDashboard();
     this.hideAllViews();
     document.getElementById('upload-view').classList.remove('hidden');
+    document.getElementById('filters-bar').classList.add('hidden');
+    this.setActiveNav('upload');
     this.renderUploadView();
   },
 
@@ -283,13 +470,12 @@ const App = {
     const view = document.getElementById('upload-view');
     view.innerHTML = `
       <div class="upload-panel">
-        <button class="btn back-btn" onclick="App.showLibrary()">Back to Library</button>
         <h2>Upload a Book</h2>
         <div class="drop-zone" id="drop-zone">
           <div class="drop-zone-content">
-            <div class="drop-icon">&#128228;</div>
+            <div class="drop-icon">\u{1F4C4}</div>
             <p>Drag and drop a file here, or click to browse</p>
-            <p class="drop-hint">Supports: PDF, EPUB, MOBI, TXT, MD, HTML</p>
+            <p class="drop-hint">EPUB, PDF, MOBI, TXT, MD, HTML</p>
             <input type="file" id="file-input"
                    accept=".pdf,.epub,.mobi,.txt,.md,.html,.htm"
                    onchange="App.handleFileSelect(event)" hidden>
@@ -321,7 +507,7 @@ const App = {
     const format = formats[ext];
     if (!format) {
       document.getElementById('upload-form-area').innerHTML =
-        `<div class="upload-item error">Unsupported format: ${this.escapeHtml(file.name)}</div>`;
+        `<div class="upload-item error"><span class="upload-status" style="color:var(--danger)">Unsupported: ${this.escapeHtml(file.name)}</span></div>`;
       return;
     }
     this._pendingFile = file;
@@ -332,16 +518,11 @@ const App = {
     const sizeStr = file.size > 1048576
       ? (file.size / 1048576).toFixed(1) + ' MB'
       : (file.size / 1024).toFixed(0) + ' KB';
-    const formatColors = {
-      epub: '#4a9eff', pdf: '#ff4a4a', mobi: '#ff9f43',
-      txt: '#7bed9f', md: '#a29bfe', html: '#fd79a8'
-    };
-    const color = formatColors[format] || '#ddd';
 
     document.getElementById('upload-form-area').innerHTML = `
       <div class="upload-form-card">
         <div class="upload-form-file">
-          <span class="format-badge" style="background:${color}">${format.toUpperCase()}</span>
+          <span class="card-badge fmt-${format}" style="position:static">${format.toUpperCase()}</span>
           ${this.escapeHtml(file.name)}
           <span class="upload-form-size">${sizeStr}</span>
         </div>
@@ -423,7 +604,7 @@ const App = {
     const progressArea = document.getElementById('upload-progress-area');
     progressArea.innerHTML = `
       <div class="upload-item">
-        <div class="upload-file-name">Uploading book...</div>
+        <div class="upload-file-name">Uploading...</div>
         <div class="upload-progress"><div class="upload-progress-bar" id="upload-bar"></div></div>
         <span class="upload-status" id="upload-status">0%</span>
       </div>
@@ -440,7 +621,7 @@ const App = {
       let coverUrl = '';
       if (this._pendingCoverFile) {
         const statusEl = document.getElementById('upload-status');
-        if (statusEl) statusEl.textContent = 'Uploading cover...';
+        if (statusEl) statusEl.textContent = 'Cover...';
         const coverResult = await S3Upload.upload(this._pendingCoverFile);
         coverUrl = coverResult.url;
       } else {
@@ -448,7 +629,7 @@ const App = {
       }
 
       const statusEl = document.getElementById('upload-status');
-      if (statusEl) statusEl.textContent = 'Registering...';
+      if (statusEl) statusEl.textContent = 'Saving...';
 
       const uvChars = '0123456789abcdefghijklmnopqrstuv';
       const bytes = crypto.getRandomValues(new Uint8Array(20));
@@ -470,55 +651,59 @@ const App = {
 
       document.getElementById('upload-form-area').innerHTML = `
         <div class="upload-success">
-          <p>&#10003; "${this.escapeHtml(title)}" uploaded successfully!</p>
+          <p>\u2713 "${this.escapeHtml(title)}" uploaded!</p>
           <button class="btn btn-primary" onclick="App.renderUploadView()">Upload Another</button>
         </div>
       `;
     } catch (e) {
       progressArea.innerHTML = `<div class="upload-item error">
-        <span class="upload-status error">Failed: ${this.escapeHtml(e.message)}</span>
+        <span class="upload-status" style="color:var(--danger)">Failed: ${this.escapeHtml(e.message)}</span>
       </div>`;
       btn.disabled = false;
-      btn.textContent = 'Retry Upload';
+      btn.textContent = 'Retry';
     }
   },
 
+  // ── Settings ──
+
   showSettings() {
     this.state.view = 'settings';
+    this.showDashboard();
     this.hideAllViews();
     document.getElementById('settings-view').classList.remove('hidden');
+    document.getElementById('filters-bar').classList.add('hidden');
+    this.setActiveNav('settings');
 
     const s3 = this.state.s3Config || {};
     const s3Status = s3.accessKeyId
-      ? `Connected: ${s3.bucket || 'no bucket'} (${s3.region || 'no region'})`
+      ? `Connected \u2014 ${s3.bucket || 'no bucket'}`
       : 'Not configured';
-    const view = document.getElementById('settings-view');
-    view.innerHTML = `
-      <div class="settings-panel">
-        <button class="btn back-btn" onclick="App.showLibrary()">Back to Library</button>
-        <h2>Settings</h2>
 
+    document.getElementById('settings-view').innerHTML = `
+      <div class="settings-panel">
+        <h2>Settings</h2>
         <div class="settings-section">
           <h3>S3 Storage</h3>
           <p class="settings-hint">
-            Boox uses your ship's S3 storage configuration from Landscape.
-            Configure it in <strong>Landscape &rarr; System Preferences &rarr; Storage</strong>.
+            Boox uses your ship's S3 storage from Landscape.
+            Configure it in Landscape \u2192 System Preferences \u2192 Storage.
           </p>
-          <p>Status: <strong>${s3Status}</strong></p>
-          ${!s3.accessKeyId ? `
-            <p class="settings-hint" style="color:var(--danger)">
-              You need to configure S3 storage in Landscape before you can upload books.
-            </p>
-          ` : ''}
+          <p style="font-size:0.85rem">Status: <strong>${s3Status}</strong></p>
         </div>
-
         <div class="settings-section">
           <h3>Library</h3>
-          <p>${this.state.books.length} book${this.state.books.length !== 1 ? 's' : ''} in library</p>
+          <p style="font-size:0.85rem">${this.state.books.length} book${this.state.books.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div class="settings-section">
+          <h3>Theme</h3>
+          <p class="settings-hint">Current: ${this.state.theme === 'dark' ? 'Dark' : 'Light'}</p>
+          <button class="btn" onclick="App.toggleTheme()">Toggle Theme</button>
         </div>
       </div>
     `;
   },
+
+  // ── Edit book ──
 
   editBook(bookId) {
     const book = this.state.books.find(b => b.id === bookId);
@@ -612,7 +797,6 @@ const App = {
 
       await BooxAPI.updateMetadata(bookId, title, author, description, coverUrl);
 
-      // Handle tags
       const book = this.state.books.find(b => b.id === bookId);
       const oldTags = new Set(book?.tags || []);
       const newTags = new Set(tagsStr.split(',').map(t => t.trim()).filter(Boolean));
@@ -637,12 +821,10 @@ const App = {
   async confirmDeleteBook(bookId) {
     const book = this.state.books.find(b => b.id === bookId);
     if (!book) return;
-    if (!confirm(`Delete "${book.title}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${book.title}"?`)) return;
     try {
-      // Delete file from S3
       if (book['s3-url']) await S3Upload.deleteObject(book['s3-url']).catch(() => {});
       if (book['cover-url']) await S3Upload.deleteObject(book['cover-url']).catch(() => {});
-      // Remove from agent
       await BooxAPI.removeBook(bookId);
       await this.loadBooks();
       this.renderLibrary();
@@ -651,15 +833,14 @@ const App = {
     }
   },
 
+  // ── Search ──
+
   onSearch(query) {
     this.state.searchQuery = query;
     this.renderLibrary();
   },
 
-  onFilterFormat(format) {
-    this.state.filterFormat = format;
-    this.renderLibrary();
-  },
+  // ── Utils ──
 
   escapeHtml(str) {
     if (!str) return '';

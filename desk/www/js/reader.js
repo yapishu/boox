@@ -8,7 +8,7 @@ const Reader = {
   fontSettings: null,
 
   loadFontSettings() {
-    const defaults = { fontFamily: 'Georgia, serif', fontSize: 100, lineHeight: 1.7 };
+    const defaults = { fontFamily: "'IBM Plex Serif', Georgia, serif", fontSize: 100, lineHeight: 1.6 };
     try {
       const saved = localStorage.getItem('boox-font-settings');
       if (saved) return { ...defaults, ...JSON.parse(saved) };
@@ -57,21 +57,36 @@ const Reader = {
     if (container) container.innerHTML = '';
   },
 
+  getThemeColors() {
+    const s = getComputedStyle(document.documentElement);
+    const r = (n, fb) => s.getPropertyValue(n).trim() || fb;
+    return {
+      bg: r('--bg', '#0F0F0F'),
+      fg: r('--text-primary', '#E8E8E6'),
+      muted: r('--text-secondary', '#8A8A87'),
+      accent: r('--accent', '#E8E8E6'),
+      link: r('--badge-reading', '#3b82f6'),
+    };
+  },
+
   applyTheme() {
     if (!this.rendition) return;
     const fs = this.fontSettings;
+    const c = this.getThemeColors();
     this.rendition.themes.default({
       'body': {
         'font-family': `${fs.fontFamily} !important`,
         'font-size': `${fs.fontSize}% !important`,
         'line-height': `${fs.lineHeight} !important`,
-        'color': '#e8e6e3 !important',
-        'background': '#1a1a2e !important',
-        'padding': '0 1rem !important'
+        'color': `${c.fg} !important`,
+        'background': `${c.bg} !important`,
+        'padding': '1.25rem 1rem 2rem !important',
+        'max-width': '80ch',
+        'margin': '0 auto !important',
       },
-      'a': { 'color': '#8b9cf7 !important' },
+      'a': { 'color': `${c.link} !important` },
       'p': { 'margin-bottom': '0.8em !important' },
-      'h1,h2,h3,h4,h5,h6': { 'color': '#f0e6d3 !important' }
+      'h1,h2,h3,h4,h5,h6': { 'color': `${c.fg} !important` }
     });
   },
 
@@ -87,9 +102,9 @@ const Reader = {
 
     const fs = this.fontSettings;
     const fonts = [
-      { label: 'Serif', value: 'Georgia, serif' },
-      { label: 'Sans', value: '-apple-system, BlinkMacSystemFont, sans-serif' },
-      { label: 'Mono', value: 'IBM Plex Mono, monospace' },
+      { label: 'Serif', value: "'IBM Plex Serif', Georgia, serif" },
+      { label: 'Sans', value: "'Hanken Grotesk', -apple-system, sans-serif" },
+      { label: 'Mono', value: "'IBM Plex Mono', monospace" },
     ];
     const spacings = [
       { label: 'Tight', value: 1.4 },
@@ -213,21 +228,18 @@ const Reader = {
 
     this.applyTheme();
 
-    // Track position & update page indicator
+    // Track position & update progress meter
     let locationsReady = false;
     this.rendition.on('relocated', (location) => {
       if (!location || !location.start) return;
       const cfi = location.start.cfi;
-      const indicator = document.getElementById('page-indicator');
 
       if (locationsReady) {
         const pct = epubBook.locations.percentageFromCfi(cfi);
         const progress = Math.round((pct || 0) * 100);
         this.savePosition(cfi, progress);
-        if (indicator) indicator.textContent = `${progress}%`;
+        if (typeof App !== 'undefined') App.updateProgressMeter(progress);
       } else if (location.start.displayed) {
-        if (indicator) indicator.textContent =
-          `${location.start.displayed.page} / ${location.start.displayed.total}`;
         this.savePosition(cfi, 0);
       }
     });
@@ -289,11 +301,9 @@ const Reader = {
 
       await page.render({ canvasContext: ctx, viewport }).promise;
       currentPage = num;
-      this.savePosition(String(num), Math.round((num / totalPages) * 100));
-
-      // Update page indicator
-      const indicator = document.getElementById('page-indicator');
-      if (indicator) indicator.textContent = `${num} / ${totalPages}`;
+      const progress = Math.round((num / totalPages) * 100);
+      this.savePosition(String(num), progress);
+      if (typeof App !== 'undefined') App.updateProgressMeter(progress);
     };
 
     await renderPage(currentPage);
@@ -381,12 +391,13 @@ const Reader = {
 
     frame.onload = () => {
       // Inject dark theme
+      const c = this.getThemeColors();
       const style = frame.contentDocument.createElement('style');
       style.textContent = `
-        body { background: #1a1a2e !important; color: #e8e6e3 !important;
-               font-family: Georgia, serif; line-height: 1.7;
+        body { background: ${c.bg} !important; color: ${c.fg} !important;
+               font-family: 'IBM Plex Serif', Georgia, serif; line-height: 1.7;
                max-width: 48rem; margin: 0 auto; padding: 2rem; }
-        a { color: #8b9cf7 !important; }
+        a { color: ${c.link} !important; }
         img { max-width: 100%; }
       `;
       frame.contentDocument.head.appendChild(style);
