@@ -29,6 +29,7 @@ const BooxAPI = {
   getBook(id)     { return this.get(`book/${id}`); },
   getS3Config()   { return this.get('s3-config'); },
   getCollections() { return this.get('collections'); },
+  getPals()       { return this.get('pals'); },
 
   addBook(bookId, metadata) {
     return this.poke({
@@ -82,5 +83,67 @@ const BooxAPI = {
 
   deleteCollection(name) {
     return this.poke({ action: 'delete-collection', name });
+  },
+
+  createCollection(name, description) {
+    return this.poke({ action: 'create-collection', name, description: description || '' });
+  },
+
+  shareCollection(name) {
+    return this.poke({ action: 'share-collection', name });
+  },
+
+  unshareCollection(name) {
+    return this.poke({ action: 'unshare-collection', name });
+  },
+
+  publishCollection(name) {
+    return this.poke({ action: 'publish-collection', name });
+  },
+
+  unpublishCollection(name) {
+    return this.poke({ action: 'unpublish-collection', name });
+  },
+
+  // Browse a friend's shared collections by @p
+  // Pokes the remote ship, then polls /remote/<ship> for cached results
+  browseShip(ship) {
+    return this.poke({ action: 'browse-ship', ship });
+  },
+
+  // Get cached remote data for a ship (after browse-ship poke)
+  getRemoteData(ship) {
+    return this.get(`remote/${encodeURIComponent(ship)}`);
+  },
+
+  // Send a book to a friend
+  sendBook(bookId, to) {
+    return this.poke({ action: 'send-book', 'book-id': bookId, to });
+  },
+
+  // Get pending book imports from friends
+  getPending() {
+    return this.get('pending');
+  },
+
+  // Dismiss (reject) a pending book
+  dismissPending(pid) {
+    return this.poke({ action: 'dismiss-pending', pid });
+  },
+
+  // Fetch a remote ship's public collections (cross-origin, for public links)
+  async getRemotePublicCollections(shipUrl) {
+    const url = shipUrl.replace(/\/$/, '') + '/apps/boox/api/public/collections';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Remote error: ${res.status}`);
+    return res.json();
+  },
+
+  // Fetch a remote ship's public collection by token (cross-origin)
+  async getRemotePublicCollection(shipUrl, token) {
+    const url = shipUrl.replace(/\/$/, '') + '/apps/boox/api/public/' + encodeURIComponent(token);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Remote error: ${res.status}`);
+    return res.json();
   }
 };

@@ -28,8 +28,7 @@
       description=@t
   ==
 ::
-::  reading position - varies by format
-::  for epub: cfi string; for pdf: page number; for text: scroll percentage
+::  reading position
 ::
 +$  position
   $:  value=@t
@@ -37,7 +36,25 @@
       updated-at=@da
   ==
 ::
-::  agent state
+::  shared collection with ACL
+::
++$  collection
+  $:  books=(set book-id)
+      description=@t
+      shared=?
+      public=?
+      share-token=(unit @uv)
+  ==
+::
+::  pending book from a friend
+::
++$  pending-book
+  $:  from=@p
+      =book
+      received-at=@da
+  ==
+::
+::  agent states
 ::
 +$  state-0
   $:  %0
@@ -45,6 +62,29 @@
       positions=(map book-id position)
       book-order=(list book-id)
       collections=(map @t (set book-id))
+  ==
+::
++$  state-1
+  $:  %1
+      books=(map book-id book)
+      positions=(map book-id position)
+      book-order=(list book-id)
+      collections=(map @t collection)
+  ==
+::
++$  state-2
+  $:  %2
+      books=(map book-id book)
+      positions=(map book-id position)
+      book-order=(list book-id)
+      collections=(map @t collection)
+      pending=(map @uv pending-book)
+  ==
+::
++$  versioned-state
+  $%  state-0
+      state-1
+      state-2
   ==
 ::
 ::  poke actions
@@ -60,6 +100,19 @@
       [%add-to-collection name=@t =book-id]
       [%remove-from-collection name=@t =book-id]
       [%delete-collection name=@t]
+      [%create-collection name=@t description=@t]
+      [%share-collection name=@t]
+      [%unshare-collection name=@t]
+      [%publish-collection name=@t]
+      [%unpublish-collection name=@t]
+      ::  social: owner-initiated
+      [%browse-ship ship=@p]
+      [%send-book =book-id to=@p]
+      [%dismiss-pending pid=@uv]
+      ::  social: remote-initiated (any ship)
+      [%request-shared ~]
+      [%shared-data from=@p data=@t]
+      [%receive-book from=@p =book]
   ==
 ::
 ::  subscription updates

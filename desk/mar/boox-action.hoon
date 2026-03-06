@@ -8,7 +8,7 @@
   |%
   ++  noun  action:boox
   ++  json
-    |=  jon=json
+    |=  jon=^json
     ^-  action:boox
     =,  dejs:format
     =/  typ=@t  ((ot ~[action+so]) jon)
@@ -85,6 +85,34 @@
     ::
         %'delete-collection'
       [%delete-collection ((ot ~[name+so]) jon)]
+    ::
+        %'create-collection'
+      =/  f  (ot ~[name+so description+so])
+      =/  [name=@t desc=@t]  (f jon)
+      [%create-collection name desc]
+    ::
+        %'share-collection'
+      [%share-collection ((ot ~[name+so]) jon)]
+    ::
+        %'unshare-collection'
+      [%unshare-collection ((ot ~[name+so]) jon)]
+    ::
+        %'publish-collection'
+      [%publish-collection ((ot ~[name+so]) jon)]
+    ::
+        %'unpublish-collection'
+      [%unpublish-collection ((ot ~[name+so]) jon)]
+    ::
+        %'browse-ship'
+      [%browse-ship ((ot ~[ship+(se %p)]) jon)]
+    ::
+        %'send-book'
+      =/  f  (ot ~[book-id+(se %uv) to+(se %p)])
+      =/  [bid=@uv to=@p]  (f jon)
+      [%send-book bid to]
+    ::
+        %'dismiss-pending'
+      [%dismiss-pending ((ot ~[pid+(se %uv)]) jon)]
     ==
   --
 ++  grad  %noun
