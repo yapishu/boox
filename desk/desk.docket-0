@@ -2,6 +2,7 @@
     info+'An ebook reader and library manager'
     color+0x4a.3728
     version+[0 2 0]
+    image+'https://pub-5eef062339ec4a0a8839cb95ec1a98a6.r2.dev/boox.svg'
     website+''
     license+'MIT'
     base+'boox'
