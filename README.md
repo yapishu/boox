@@ -3,9 +3,9 @@
 
 ## `|install ~matwet %boox` 
 
-<img width="1028" height="932" alt="image" src="https://github.com/user-attachments/assets/7d5f2206-f5da-4aae-9eec-81602a058676" />
-
 An ebook reader and library manager for Urbit. Upload books to S3, read them in-browser, track your progress, and share collections with other ships.
+
+<img width="1028" height="932" alt="image" src="https://github.com/user-attachments/assets/7d5f2206-f5da-4aae-9eec-81602a058676" />
 
 ## Features
 
