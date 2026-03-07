@@ -106,6 +106,9 @@
         %'toggle-opds'
       [%toggle-opds ~]
     ::
+        %'set-opds-password'
+      [%set-opds-password ((ot ~[password+so]) jon)]
+    ::
         %'browse-ship'
       [%browse-ship ((ot ~[ship+(se %p)]) jon)]
     ::

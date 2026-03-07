@@ -91,11 +91,23 @@
       opds-enabled=?
   ==
 ::
++$  state-4
+  $:  %4
+      books=(map book-id book)
+      positions=(map book-id position)
+      book-order=(list book-id)
+      collections=(map @t collection)
+      pending=(map @uv pending-book)
+      opds-enabled=?
+      opds-password=@t
+  ==
+::
 +$  versioned-state
   $%  state-0
       state-1
       state-2
       state-3
+      state-4
   ==
 ::
 ::  poke actions
@@ -118,6 +130,7 @@
       [%unpublish-collection name=@t]
       ::  settings
       [%toggle-opds ~]
+      [%set-opds-password password=@t]
       ::  social: owner-initiated
       [%browse-ship ship=@p]
       [%send-book =book-id to=@p]

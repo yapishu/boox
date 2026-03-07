@@ -134,6 +134,11 @@ const BooxAPI = {
     return this.poke({ action: 'toggle-opds' });
   },
 
+  // Set OPDS password
+  setOpdsPassword(password) {
+    return this.poke({ action: 'set-opds-password', password });
+  },
+
   // Dismiss (reject) a pending book
   dismissPending(pid) {
     return this.poke({ action: 'dismiss-pending', pid });

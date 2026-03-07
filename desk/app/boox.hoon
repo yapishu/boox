@@ -186,7 +186,7 @@
 --
 ::
 %-  agent:dbug
-=|  state-3:boox
+=|  state-4:boox
 =*  state  -
 =/  remote-cache  *(map @p json)
 %+  verb  |
@@ -207,19 +207,22 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state:boox vase)
   ?-  -.old
-      %3  `this(state old)
+      %4  `this(state old)
+  ::
+      %3
+    `this(state [%4 books.old positions.old book-order.old collections.old pending.old opds-enabled.old ''])
   ::
       %2
-    `this(state [%3 books.old positions.old book-order.old collections.old pending.old %.n])
+    `this(state [%4 books.old positions.old book-order.old collections.old pending.old %.n ''])
   ::
       %1
-    `this(state [%3 books.old positions.old book-order.old collections.old ~ %.n])
+    `this(state [%4 books.old positions.old book-order.old collections.old ~ %.n ''])
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    `this(state [%3 books.old positions.old book-order.old new-colls ~ %.n])
+    `this(state [%4 books.old positions.old book-order.old new-colls ~ %.n ''])
   ==
 ::
 ++  on-init
@@ -268,6 +271,10 @@
     ::
         %toggle-opds
       =.  opds-enabled  !opds-enabled
+      `this
+    ::
+        %set-opds-password
+      =.  opds-password  password.act
       `this
     ::
         %add-book
@@ -436,6 +443,8 @@
     =/  colon=(unit @ud)  (find ":" cred)
     ?~  colon  %.n
     =/  pass=tape  (slag +(u.colon) cred)
+    ?:  !=('' opds-password)
+      =(pass (trip opds-password))
     =/  code=@p
       .^(@p %j /(scot %p our.bowl)/code/(scot %da now.bowl)/(scot %p our.bowl))
     =(pass (trip (scot %p code)))
@@ -923,6 +932,7 @@
       %-  json-response:gen:server
       %-  pairs:enjs:format
       :~  ['opds-enabled' b+opds-enabled]
+          ['opds-password' s+opds-password]
       ==
     ::
     ::  OPDS catalog feeds
@@ -1073,6 +1083,9 @@
         ::
             %'toggle-opds'
           [%toggle-opds ~]
+        ::
+            %'set-opds-password'
+          [%set-opds-password ((ot ~[password+so]) jon)]
         ::
             %'browse-ship'
           [%browse-ship ((ot ~[ship+(se %p)]) jon)]

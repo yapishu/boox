@@ -1276,9 +1276,11 @@ const App = {
       : 'Not configured';
 
     let opdsEnabled = false;
+    let opdsPassword = '';
     try {
       const settings = await BooxAPI.getSettings();
       opdsEnabled = settings['opds-enabled'] || false;
+      opdsPassword = settings['opds-password'] || '';
     } catch (e) {}
 
     const opdsUrl = `${window.location.origin}/apps/boox/api/opds`;
@@ -1302,7 +1304,7 @@ const App = {
           <h3>OPDS Catalog</h3>
           <p class="settings-hint">
             Serve your library as an OPDS feed for e-reader apps (KOReader, Calibre, Moon+ Reader, etc).
-            Uses HTTP Basic Auth with your +code as the password.
+            Uses HTTP Basic Auth.
           </p>
           <label class="toggle-row">
             <span>Enable OPDS</span>
@@ -1315,7 +1317,12 @@ const App = {
                 <input type="text" readonly value="${this.escapeHtml(opdsUrl)}" class="public-link-input" id="opds-url-input" style="flex:1">
                 <button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('opds-url-input').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1500)">Copy</button>
               </div>
-              <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem">Username: anything &bull; Password: your +code</p>
+              <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:0.75rem;margin-bottom:0.25rem">Password:</p>
+              <div style="display:flex;gap:0.5rem;align-items:center">
+                <input type="text" id="opds-password-input" value="${this.escapeHtml(opdsPassword)}" placeholder="Leave blank to use +code" class="public-link-input" style="flex:1">
+                <button class="btn btn-sm" onclick="App.saveOpdsPassword()">Save</button>
+              </div>
+              <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem">Username: anything &bull; Password: ${opdsPassword ? 'custom password' : 'your +code (default)'}</p>
             </div>
           ` : ''}
         </div>
@@ -1334,6 +1341,18 @@ const App = {
       await this.showSettings();
     } catch (e) {
       toast('Failed to toggle OPDS: ' + e.message, 'error');
+    }
+  },
+
+  async saveOpdsPassword() {
+    const input = document.getElementById('opds-password-input');
+    const password = input ? input.value.trim() : '';
+    try {
+      await BooxAPI.setOpdsPassword(password);
+      toast(password ? 'OPDS password updated' : 'OPDS password cleared (using +code)');
+      await this.showSettings();
+    } catch (e) {
+      toast('Failed to save password: ' + e.message, 'error');
     }
   },
 
