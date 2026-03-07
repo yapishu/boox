@@ -19,6 +19,170 @@
     %md    'md'
     %html  'html'
   ==
+++  format-to-mime
+  |=  fmt=format:boox
+  ^-  @t
+  ?-  fmt
+    %pdf   'application/pdf'
+    %epub  'application/epub+zip'
+    %mobi  'application/x-mobipocket-ebook'
+    %txt   'text/plain'
+    %md    'text/markdown'
+    %html  'text/html'
+  ==
+::
+++  xml-escape
+  |=  t=tape
+  ^-  tape
+  %-  zing
+  %+  turn  t
+  |=  c=@t
+  ?+  c  [c ~]
+    %'&'   "&amp;"
+    %'<'   "&lt;"
+    %'>'   "&gt;"
+    %'"'   "&quot;"
+    %'\''  "&apos;"
+  ==
+::
+++  opds-response
+  |=  body=tape
+  ^-  simple-payload:http
+  :_  `(as-octs:mimes:html (crip body))
+  :-  200
+  :~  ['content-type' 'application/atom+xml;profile=opds-catalog;charset=utf-8']
+  ==
+::
+++  opds-book-entry
+  |=  [bid=book-id:boox bk=book:boox base=tape]
+  ^-  tape
+  =/  desc=tape
+    ?:  =('' description.bk)  ""
+    "<summary>{(xml-escape (trip description.bk))}</summary>"
+  =/  cover=tape
+    ?:  =('' cover-url.bk)  ""
+    "<link rel=\"http://opds-spec.org/image\" href=\"{(xml-escape (trip cover-url.bk))}\" type=\"image/jpeg\"/>"
+  =/  acq=tape
+    ?:  =('' s3-url.bk)  ""
+    "<link rel=\"http://opds-spec.org/acquisition\" href=\"{(xml-escape (trip s3-url.bk))}\" type=\"{(trip (format-to-mime format.bk))}\"/>"
+  =/  cats=tape
+    %-  zing
+    %+  turn  ~(tap in tags.bk)
+    |=  tag=@t
+    "<category term=\"{(xml-escape (trip tag))}\"/>"
+  ;:  welp
+    "<entry>"
+    "<title>{(xml-escape (trip title.bk))}</title>"
+    "<id>urn:urbit:boox:{(trip (scot %uv bid))}</id>"
+    "<author><name>{(xml-escape (trip author.bk))}</name></author>"
+    desc
+    cover
+    acq
+    cats
+    "</entry>"
+  ==
+::
+++  opds-root
+  |=  [ship=tape base=tape colls=(map @t collection:boox)]
+  ^-  simple-payload:http
+  =/  header=tape
+    ;:  welp
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+      "<feed xmlns=\"http://www.w3.org/2005/Atom\" "
+      "xmlns:opds=\"http://opds-spec.org/2010/catalog\">"
+      "<id>urn:urbit:boox:{ship}:root</id>"
+      "<title>Boox on {ship}</title>"
+      "<author><name>{ship}</name></author>"
+      "<link rel=\"self\" href=\"{base}/opds\" type=\"application/atom+xml;profile=opds-catalog;kind=navigation\"/>"
+      "<link rel=\"start\" href=\"{base}/opds\" type=\"application/atom+xml;profile=opds-catalog;kind=navigation\"/>"
+    ==
+  =/  all-entry=tape
+    ;:  welp
+      "<entry>"
+      "<title>All Books</title>"
+      "<id>urn:urbit:boox:{ship}:all</id>"
+      "<link rel=\"subsection\" href=\"{base}/opds/all\" type=\"application/atom+xml;profile=opds-catalog;kind=acquisition\"/>"
+      "<content type=\"text\">Browse your entire library</content>"
+      "</entry>"
+    ==
+  =/  coll-entries=tape
+    %-  zing
+    %+  turn  ~(tap by colls)
+    |=  [name=@t c=collection:boox]
+    =/  cdesc=tape
+      ?:  =('' description.c)  ""
+      "<content type=\"text\">{(xml-escape (trip description.c))}</content>"
+    ;:  welp
+      "<entry>"
+      "<title>{(xml-escape (trip name))}</title>"
+      "<id>urn:urbit:boox:{ship}:collection:{(xml-escape (trip name))}</id>"
+      "<link rel=\"subsection\" href=\"{base}/opds/collection/{(xml-escape (trip name))}\" type=\"application/atom+xml;profile=opds-catalog;kind=acquisition\"/>"
+      cdesc
+      "</entry>"
+    ==
+  %-  opds-response
+  ;:  welp
+    header
+    all-entry
+    coll-entries
+    "</feed>"
+  ==
+::
+++  opds-all-books
+  |=  [ship=tape base=tape order=(list book-id:boox) bks=(map book-id:boox book:boox)]
+  ^-  simple-payload:http
+  =/  ordered=(list [book-id:boox book:boox])
+    %+  murn  order
+    |=  bid=book-id:boox
+    =/  bk=(unit book:boox)  (~(get by bks) bid)
+    ?~  bk  ~
+    `[bid u.bk]
+  =/  header=tape
+    ;:  welp
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+      "<feed xmlns=\"http://www.w3.org/2005/Atom\" "
+      "xmlns:opds=\"http://opds-spec.org/2010/catalog\">"
+      "<id>urn:urbit:boox:{ship}:all</id>"
+      "<title>All Books</title>"
+      "<author><name>{ship}</name></author>"
+      "<link rel=\"self\" href=\"{base}/opds/all\" type=\"application/atom+xml;profile=opds-catalog;kind=acquisition\"/>"
+      "<link rel=\"up\" href=\"{base}/opds\" type=\"application/atom+xml;profile=opds-catalog;kind=navigation\"/>"
+    ==
+  =/  entries=tape
+    %-  zing
+    %+  turn  ordered
+    |=  [bid=book-id:boox bk=book:boox]
+    (opds-book-entry bid bk base)
+  %-  opds-response
+  ;:  welp  header  entries  "</feed>"  ==
+::
+++  opds-collection-feed
+  |=  [name=@t ship=tape base=tape coll=collection:boox bks=(map book-id:boox book:boox)]
+  ^-  simple-payload:http
+  =/  coll-books=(list [book-id:boox book:boox])
+    %+  murn  ~(tap in books.coll)
+    |=  bid=book-id:boox
+    =/  bk=(unit book:boox)  (~(get by bks) bid)
+    ?~  bk  ~
+    `[bid u.bk]
+  =/  header=tape
+    ;:  welp
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+      "<feed xmlns=\"http://www.w3.org/2005/Atom\" "
+      "xmlns:opds=\"http://opds-spec.org/2010/catalog\">"
+      "<id>urn:urbit:boox:{ship}:collection:{(xml-escape (trip name))}</id>"
+      "<title>{(xml-escape (trip name))}</title>"
+      "<author><name>{ship}</name></author>"
+      "<link rel=\"self\" href=\"{base}/opds/collection/{(xml-escape (trip name))}\" type=\"application/atom+xml;profile=opds-catalog;kind=acquisition\"/>"
+      "<link rel=\"up\" href=\"{base}/opds\" type=\"application/atom+xml;profile=opds-catalog;kind=navigation\"/>"
+    ==
+  =/  entries=tape
+    %-  zing
+    %+  turn  coll-books
+    |=  [bid=book-id:boox bk=book:boox]
+    (opds-book-entry bid bk base)
+  %-  opds-response
+  ;:  welp  header  entries  "</feed>"  ==
 --
 ::
 %-  agent:dbug
@@ -700,6 +864,22 @@
               ['received-at' (sect:enjs:format received-at.pb)]
           ==
       ==
+    ::
+    ::  OPDS catalog feeds
+    ::
+        [%opds ~]
+      =/  ship=tape  (trip (scot %p our.bowl))
+      (opds-root ship "/apps/boox/api" collections)
+    ::
+        [%opds %all ~]
+      =/  ship=tape  (trip (scot %p our.bowl))
+      (opds-all-books ship "/apps/boox/api" book-order books)
+    ::
+        [%opds %collection @ ~]
+      =/  ship=tape  (trip (scot %p our.bowl))
+      =/  coll=(unit collection:boox)  (~(get by collections) i.t.t.site)
+      ?~  coll  not-found:gen:server
+      (opds-collection-feed i.t.t.site ship "/apps/boox/api" u.coll books)
     ==
   ::
   ++  handle-poke
