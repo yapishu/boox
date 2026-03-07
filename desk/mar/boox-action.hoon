@@ -103,6 +103,9 @@
         %'unpublish-collection'
       [%unpublish-collection ((ot ~[name+so]) jon)]
     ::
+        %'toggle-readable'
+      [%toggle-readable ((ot ~[name+so]) jon)]
+    ::
         %'toggle-opds'
       [%toggle-opds ~]
     ::

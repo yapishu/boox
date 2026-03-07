@@ -1053,6 +1053,14 @@ window.App = {
                 ${coll.public ? 'On' : 'Off'}
               </button>
             </label>
+            ${coll.public ? `
+            <label class="toggle-row">
+              <span>Allow reading</span>
+              <button class="toggle-btn ${coll.readable ? 'active' : ''}" onclick="App.toggleReadable('${this.escapeHtml(name)}')">
+                ${coll.readable ? 'On' : 'Off'}
+              </button>
+            </label>
+            ` : ''}
             ${publicUrl ? `
               <div class="public-link-row">
                 <input type="text" readonly value="${this.escapeHtml(publicUrl)}" class="public-link-input" id="public-link-input">
@@ -1106,6 +1114,16 @@ window.App = {
     try {
       if (enable) await BooxAPI.publishCollection(name);
       else await BooxAPI.unpublishCollection(name);
+      document.querySelector('.modal-overlay')?.remove();
+      await this.showCollectionDetail(name);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  },
+
+  async toggleReadable(name) {
+    try {
+      await BooxAPI.toggleReadable(name);
       document.querySelector('.modal-overlay')?.remove();
       await this.showCollectionDetail(name);
     } catch (e) {

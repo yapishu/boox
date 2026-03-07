@@ -105,6 +105,10 @@ window.BooxAPI = {
     return this.poke({ action: 'unpublish-collection', name });
   },
 
+  toggleReadable(name) {
+    return this.poke({ action: 'toggle-readable', name });
+  },
+
   // Browse a friend's shared collections by @p
   // Pokes the remote ship, then polls /remote/<ship> for cached results
   browseShip(ship) {

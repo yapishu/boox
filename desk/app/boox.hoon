@@ -186,7 +186,7 @@
 --
 ::
 %-  agent:dbug
-=|  state-4:boox
+=|  state-5:boox
 =*  state  -
 =/  remote-cache  *(map @p json)
 %+  verb  |
@@ -219,22 +219,25 @@
         [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
   ?-  -.old
-      %4  [cleanup this(state old)]
+      %5  [cleanup this(state old)]
+  ::
+      %4
+    [cleanup this(state [%5 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~])]
   ::
       %3
-    [cleanup this(state [%4 books.old positions.old book-order.old collections.old pending.old opds-enabled.old ''])]
+    [cleanup this(state [%5 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~])]
   ::
       %2
-    [cleanup this(state [%4 books.old positions.old book-order.old collections.old pending.old %.n ''])]
+    [cleanup this(state [%5 books.old positions.old book-order.old collections.old pending.old %.n '' ~])]
   ::
       %1
-    [cleanup this(state [%4 books.old positions.old book-order.old collections.old ~ %.n ''])]
+    [cleanup this(state [%5 books.old positions.old book-order.old collections.old ~ %.n '' ~])]
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    [cleanup this(state [%4 books.old positions.old book-order.old new-colls ~ %.n ''])]
+    [cleanup this(state [%5 books.old positions.old book-order.old new-colls ~ %.n '' ~])]
   ==
 ::
 ++  on-init
@@ -413,6 +416,13 @@
       =.  public.u.coll  %.n
       =.  share-token.u.coll  ~
       =.  collections  (~(put by collections) name.act u.coll)
+      `this
+    ::
+        %toggle-readable
+      =.  readable-colls
+        ?:  (~(has in readable-colls) name.act)
+          (~(del in readable-colls) name.act)
+        (~(put in readable-colls) name.act)
       `this
     ::
         %browse-ship
@@ -684,6 +694,7 @@
         `[name c]
       ?~  found  not-found:gen:server
       =/  [coll-name=@t coll=collection:boox]  u.found
+      =/  readable=?  (~(has in readable-colls) coll-name)
       =/  coll-books=(list [book-id:boox book:boox])
         %+  murn  ~(tap in books.coll)
         |=  bid=book-id:boox
@@ -695,6 +706,7 @@
       :~  ['ship' s+(scot %p our.bowl)]
           ['name' s+coll-name]
           ['description' s+description.coll]
+          ['readable' b+readable]
           :-  'books'
           :-  %a
           %+  turn  coll-books
@@ -704,7 +716,9 @@
               ['title' s+title.bk]
               ['author' s+author.bk]
               ['format' s+(format-to-cord format.bk)]
-              ['s3-url' s+s3-url.bk]
+              ?:  readable
+                ['s3-url' s+s3-url.bk]
+              ['s3-url' s+'']
               ['cover-url' s+cover-url.bk]
               ['file-size' (numb:enjs:format file-size.bk)]
               ['date-added' (sect:enjs:format date-added.bk)]
@@ -726,6 +740,9 @@
           "<meta name=robots content='noindex,nofollow'>"
           "<title>Shared Collection - Boox</title>"
           "<link href='https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap' rel=stylesheet>"
+          "<script src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'></script>"
+          "<script src='https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js'></script>"
+          "<script src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'></script>"
           "<style>"
           "*,*::before,*::after\{box-sizing:border-box;margin:0;padding:0}"
           "body\{font-family:'Hanken Grotesk',-apple-system,system-ui,sans-serif;"
@@ -735,8 +752,8 @@
           ".sh\{color:#5A5A58;font-size:.8rem;font-family:monospace;margin-bottom:.25rem}"
           "h1\{font-size:1.5rem;font-weight:600;margin-bottom:.25rem;letter-spacing:-.02em}"
           ".dc\{color:#8A8A87;margin-bottom:2rem;font-size:.9rem}"
-          ".g\{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:1.25rem}"
-          ".c\{transition:transform 150ms ease}.c:hover\{transform:translateY(-2px)}"
+          ".g\{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,200px));gap:1.25rem}"
+          ".c\{cursor:pointer;transition:transform 150ms ease}.c:hover\{transform:translateY(-2px)}"
           ".cv\{aspect-ratio:2/3;background:#1E1E1C;border-radius:8px;overflow:hidden;"
           "position:relative;border:1px solid #2A2A28;margin-bottom:.5rem}"
           ".cv img\{width:100%;height:100%;object-fit:cover}"
@@ -756,22 +773,46 @@
           ".pw a\{color:#8A8A87;text-decoration:none}.pw a:hover\{color:#E8E8E6}"
           ".ht\{background:#1A1A18;border:1px solid #2A2A28;border-radius:8px;"
           "padding:1rem;margin-bottom:2rem;font-size:.85rem;color:#8A8A87}"
+          "#reader-overlay\{position:fixed;top:0;left:0;right:0;bottom:0;background:#0F0F0F;"
+          "z-index:1000;display:none;flex-direction:column}"
+          "#reader-overlay.open\{display:flex}"
+          ".rbar\{display:flex;align-items:center;padding:.75rem 1rem;gap:.75rem;"
+          "border-bottom:1px solid #2A2A28;flex-shrink:0}"
+          ".rbar button\{background:none;border:none;color:#E8E8E6;font-size:1.2rem;cursor:pointer}"
+          ".rbar .rtitle\{font-size:.85rem;color:#8A8A87;overflow:hidden;"
+          "text-overflow:ellipsis;white-space:nowrap;flex:1}"
+          ".rbar a\{color:#8A8A87;font-size:.75rem;text-decoration:none;white-space:nowrap}"
+          ".rbar a:hover\{color:#E8E8E6}"
+          "#reader-content\{flex:1;overflow:auto}"
+          ".pdf-pg\{display:flex;justify-content:center;padding:1rem}"
+          ".pdf-pg canvas\{max-width:100%;height:auto}"
           "</style></head><body><div class=w id=app>"
           "<div class=ld>Loading collection...</div></div>"
+          "<div id=reader-overlay><div class=rbar>"
+          "<button onclick=\"closeReader()\">&larr;</button>"
+          "<span class=rtitle id=reader-title></span>"
+          "<a id=reader-dl href='' download>Download</a></div>"
+          "<div id=reader-content></div></div>"
           "<script>"
+          "pdfjsLib.GlobalWorkerOptions.workerSrc="
+          "'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';"
+          "var BKS=[];"
           "fetch('"
           api-path
           "').then(function(r)\{if(!r.ok)throw new Error('Not found');return r.json()})"
           ".then(function(d)\{"
-          "var a=document.getElementById('app'),h='';"
+          "BKS=d.books;var a=document.getElementById('app'),h='';"
           "h+='<div class=sh>'+e(d.ship)+'</div>';"
           "h+='<h1>'+e(d.name)+'</h1>';"
           "if(d.description)h+='<p class=dc>'+e(d.description)+'</p>';"
-          "h+='<div class=ht>This collection has <strong>'+d.books.length+'</strong> book'+"
-          "(d.books.length!==1?'s':'')+'. If you have Boox on your Urbit ship, you can import these from the <strong>Collections</strong> tab.</div>';"
+          "if(!d.readable)h+='<div class=ht>This collection has <strong>'+d.books.length+'</strong> book'+"
+          "(d.books.length!==1?'s':'')+'. A showcase of the owner&#39;s library.</div>';"
+          "else h+='<div class=ht>This collection has <strong>'+d.books.length+'</strong> book'+"
+          "(d.books.length!==1?'s':'')+'. Click a book to read it.</div>';"
           "h+='<div class=g>';"
-          "d.books.forEach(function(b)\{"
-          "h+='<div class=c><div class=cv>';"
+          "d.books.forEach(function(b,i)\{"
+          "var oc=d.readable?'onclick=\"openBook('+i+')\"':'';"
+          "h+='<div class=c '+oc+'><div class=cv>';"
           "if(b['cover-url'])h+='<img src=\"'+e(b['cover-url'])+'\" loading=lazy>';"
           "else h+='<div class=ph>'+e(b.title).slice(0,40)+'</div>';"
           "h+='<span class=bg>'+e(b.format)+'</span></div>';"
@@ -782,6 +823,32 @@
           "a.innerHTML=h})"
           ".catch(function(x)\{document.getElementById('app').innerHTML='<div class=er>'+e(x.message)+'</div>'});"
           "function e(s)\{if(!s)return '';var d=document.createElement('div');d.textContent=s;return d.innerHTML}"
+          "function openBook(i)\{"
+          "var b=BKS[i],u=b['s3-url'],f=b.format,ov=document.getElementById('reader-overlay'),"
+          "rc=document.getElementById('reader-content');"
+          "document.getElementById('reader-title').textContent=b.title;"
+          "var dl=document.getElementById('reader-dl');"
+          "dl.href=u;dl.style.display=u?'':'none';"
+          "rc.innerHTML='<div class=ld>Loading...</div>';"
+          "ov.classList.add('open');"
+          "if(f==='epub')\{var book=ePub(u);"
+          "rc.innerHTML='';var rend=book.renderTo(rc,\{width:'100%',height:'100%',spread:'none'\});"
+          "rend.display();"
+          "rc.onclick=function(ev)\{var w=rc.offsetWidth,x=ev.clientX;"
+          "if(x<w*0.3)rend.prev();else if(x>w*0.7)rend.next()\}}"
+          "else if(f==='pdf')\{"
+          "pdfjsLib.getDocument(u).promise.then(function(pdf)\{"
+          "rc.innerHTML='';for(var p=1;p<=pdf.numPages;p++)(function(pn)\{"
+          "pdf.getPage(pn).then(function(pg)\{"
+          "var sc=Math.min((window.innerWidth-32)/pg.getViewport(\{scale:1\}).width,2);"
+          "var vp=pg.getViewport(\{scale:sc\}),cv=document.createElement('canvas');"
+          "cv.width=vp.width;cv.height=vp.height;"
+          "var dv=document.createElement('div');dv.className='pdf-pg';dv.appendChild(cv);"
+          "rc.appendChild(dv);pg.render(\{canvasContext:cv.getContext('2d'),viewport:vp\})"
+          "\})\})(p)\})}"
+          "else\{window.open(u,'_blank');ov.classList.remove('open')\}}"
+          "function closeReader()\{document.getElementById('reader-overlay').classList.remove('open');"
+          "document.getElementById('reader-content').innerHTML=''}"
           "</script></body></html>"
         ==
       =/  bod  (as-octs:mimes:html (crip page))
@@ -922,6 +989,7 @@
               ['description' s+description.c]
               ['shared' b+shared.c]
               ['public' b+public.c]
+              ['readable' b+(~(has in readable-colls) name)]
               :-  'share-token'
               ?~  share-token.c  ~
               s+(scot %uv u.share-token.c)
@@ -1136,6 +1204,9 @@
         ::
             %'unpublish-collection'
           [%unpublish-collection ((ot ~[name+so]) jon)]
+        ::
+            %'toggle-readable'
+          [%toggle-readable ((ot ~[name+so]) jon)]
         ::
             %'toggle-opds'
           [%toggle-opds ~]
