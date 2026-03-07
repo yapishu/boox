@@ -209,8 +209,14 @@
   ::  disconnect stale /apps/boox binding if it exists
   ::  (was accidentally bound in a previous on-init)
   ::
+  ::  take over stale /apps/boox binding from old %boox-fileserver
+  ::  re-bind first to claim the duct, then disconnect to free for docket
+  ::
   =/  cleanup=(list card)
-    :~  [%pass /eyre/connect %arvo %e %disconnect [~ /apps/boox]]
+    :~  [%pass /eyre/connect %arvo %e %connect [~ /apps/boox] dap.bowl]
+        [%pass /eyre/connect %arvo %e %disconnect [~ /apps/boox]]
+        ::  re-bind our API endpoint
+        [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
   ?-  -.old
       %4  [cleanup this(state old)]
@@ -234,8 +240,9 @@
 ++  on-init
   ^-  (quip card _this)
   :_  this
-  :~  ::  disconnect stale /apps/boox binding if present
-      [%pass /eyre/connect %arvo %e %disconnect [~ /apps/boox]]
+  :~  ::  take over stale /apps/boox binding, then release it for docket
+      [%pass /eyre/takeover %arvo %e %connect [~ /apps/boox] dap.bowl]
+      [%pass /eyre/takeover %arvo %e %disconnect [~ /apps/boox]]
       ::  bind our API endpoint
       :*  %pass  /eyre/connect
           %arvo  %e  %connect
