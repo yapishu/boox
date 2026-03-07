@@ -1,6 +1,6 @@
 // Book reader module - handles rendering for all supported formats
 
-const Reader = {
+window.Reader = {
   container: null,
   currentBook: null,
   rendition: null,

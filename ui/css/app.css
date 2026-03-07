@@ -896,6 +896,54 @@ body {
   margin-bottom: 1rem;
 }
 
+/* Bulk upload */
+.bulk-summary {
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.bulk-summary strong { color: var(--text-primary); }
+.bulk-rejected {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+.bulk-file-list {
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bulk-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+.bulk-file-row.bulk-active { border-color: var(--accent); }
+.bulk-file-row.bulk-done { border-color: var(--success); opacity: 0.7; }
+.bulk-file-row.bulk-error { border-color: var(--danger); }
+.bulk-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bulk-file-status {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  min-width: 60px;
+  text-align: right;
+}
+.bulk-file-status.bulk-done { color: var(--success); }
+.bulk-file-status.bulk-error { color: var(--danger); }
+
 /* Cover input */
 .cover-input-row {
   display: flex;

@@ -206,29 +206,38 @@
   |=  =vase
   ^-  (quip card _this)
   =/  old  !<(versioned-state:boox vase)
+  ::  disconnect stale /apps/boox binding if it exists
+  ::  (was accidentally bound in a previous on-init)
+  ::
+  =/  cleanup=(list card)
+    :~  [%pass /eyre/connect %arvo %e %disconnect [~ /apps/boox]]
+    ==
   ?-  -.old
-      %4  `this(state old)
+      %4  [cleanup this(state old)]
   ::
       %3
-    `this(state [%4 books.old positions.old book-order.old collections.old pending.old opds-enabled.old ''])
+    [cleanup this(state [%4 books.old positions.old book-order.old collections.old pending.old opds-enabled.old ''])]
   ::
       %2
-    `this(state [%4 books.old positions.old book-order.old collections.old pending.old %.n ''])
+    [cleanup this(state [%4 books.old positions.old book-order.old collections.old pending.old %.n ''])]
   ::
       %1
-    `this(state [%4 books.old positions.old book-order.old collections.old ~ %.n ''])
+    [cleanup this(state [%4 books.old positions.old book-order.old collections.old ~ %.n ''])]
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    `this(state [%4 books.old positions.old book-order.old new-colls ~ %.n ''])
+    [cleanup this(state [%4 books.old positions.old book-order.old new-colls ~ %.n ''])]
   ==
 ::
 ++  on-init
   ^-  (quip card _this)
   :_  this
-  :~  :*  %pass  /eyre/connect
+  :~  ::  disconnect stale /apps/boox binding if present
+      [%pass /eyre/connect %arvo %e %disconnect [~ /apps/boox]]
+      ::  bind our API endpoint
+      :*  %pass  /eyre/connect
           %arvo  %e  %connect
           [`/apps/boox/api dap.bowl]
       ==
@@ -428,11 +437,12 @@
     |=  headers=(list [key=@t value=@t])
     ^-  ?
     =/  auth-header=(unit @t)
-      %-  ~(rep by (malt headers))
-      |=  [[key=@t val=@t] found=(unit @t)]
-      ?^  found  found
-      ?.  =('authorization' (cass:so (trip key)))  found
-      `val
+      =/  hdrs=(list [key=@t value=@t])  headers
+      |-
+      ?~  hdrs  ~
+      ?:  =("authorization" (cass (trip key.i.hdrs)))
+        `value.i.hdrs
+      $(hdrs t.hdrs)
     ?~  auth-header  %.n
     =/  val=tape  (trip u.auth-header)
     ?.  =("Basic " (scag 6 val))  %.n
@@ -447,7 +457,8 @@
       =(pass (trip opds-password))
     =/  code=@p
       .^(@p %j /(scot %p our.bowl)/code/(scot %da now.bowl)/(scot %p our.bowl))
-    =(pass (trip (scot %p code)))
+    =/  code-text=tape  (trip (scot %p code))
+    =(pass ?:(=("~" (scag 1 code-text)) (slag 1 code-text) code-text))
   ::
   ++  handle-request-shared
     |=  requester=@p
@@ -573,6 +584,32 @@
       :_  this
       %+  give-simple-payload:app:server  eyre-id
       (handle-scry site)
+    ::  PWA assets: no auth, served with correct MIME types
+    ::  (docket glob serves as application/octet-stream which browsers reject)
+    ::
+    ?:  ?&  ?=([@ ~] site)
+            =(i.site 'manifest.json')
+        ==
+      :_  this
+      %+  give-simple-payload:app:server  eyre-id
+      :_  :-  ~
+          %-  as-octs:mimes:html
+          '{"name":"Boox","short_name":"Boox","start_url":"/apps/boox/","scope":"/apps/boox/","display":"standalone","background_color":"#0f0f1a","theme_color":"#8b9cf7","icons":[{"src":"/apps/boox/icon.svg","sizes":"any","type":"image/svg+xml"}]}'
+      :-  200
+      :~  ['content-type' 'application/manifest+json']
+      ==
+    ?:  ?&  ?=([@ ~] site)
+            =(i.site 'sw.js')
+        ==
+      :_  this
+      %+  give-simple-payload:app:server  eyre-id
+      :_  :-  ~
+          %-  as-octs:mimes:html
+          'self.addEventListener("install",e=>{e.waitUntil(self.skipWaiting())});self.addEventListener("activate",e=>{e.waitUntil(self.clients.claim())});self.addEventListener("fetch",e=>{const u=new URL(e.request.url);if(u.pathname.startsWith("/apps/boox/api")||u.origin!==self.location.origin)return;e.respondWith(fetch(e.request).then(r=>{if(r.ok){const c=r.clone();caches.open("boox-v2").then(ca=>ca.put(e.request,c))}return r}).catch(()=>caches.match(e.request)))});'
+      :-  200
+      :~  ['content-type' 'application/javascript']
+          ['service-worker-allowed' '/apps/boox/']
+      ==
     ::  all other endpoints require auth
     ::
     ?.  authenticated.req
@@ -1215,9 +1252,10 @@
   |=  [=wire sign=sign-arvo]
   ^-  (quip card _this)
   ?+  wire  (on-arvo:def wire sign)
-      [%eyre %connect ~]
-    ?>  ?=(%bound +<.sign)
-    ~?  !accepted.sign  [dap.bowl %binding-rejected binding.sign]
+      [%eyre *]
+    ?:  ?=(%bound +<.sign)
+      ~?  !accepted.sign  [dap.bowl %binding-rejected binding.sign]
+      [~ this]
     [~ this]
   ==
 --

@@ -1,7 +1,7 @@
 // Boox API client
 // Communicates with the %boox agent via JSON HTTP API
 
-const BooxAPI = {
+window.BooxAPI = {
   base: '/apps/boox/api',
 
   async get(path) {

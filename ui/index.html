@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Boox</title>
   <link rel="icon" type="image/svg+xml" href="/apps/boox/icon.svg">
-  <link rel="manifest" href="/apps/boox/manifest.json">
-  <!-- Fonts (matching Alex) -->
+  <link rel="manifest" href="/apps/boox/api/manifest.json">
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Serif:wght@300;400;500&display=swap" rel="stylesheet">
@@ -27,7 +27,6 @@
       else document.documentElement.classList.add('dark');
     })();
   </script>
-  <link rel="stylesheet" href="/apps/boox/css/app.css">
 </head>
 <body>
   <div id="app">
@@ -35,9 +34,6 @@
       Loading...
     </div>
   </div>
-  <script src="/apps/boox/js/api.js"></script>
-  <script src="/apps/boox/js/s3.js"></script>
-  <script src="/apps/boox/js/reader.js"></script>
-  <script src="/apps/boox/js/app.js"></script>
+  <script type="module" src="/main.js"></script>
 </body>
 </html>

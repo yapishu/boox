@@ -1,9 +1,9 @@
 :~  title+'boox'
     info+'An ebook reader and library manager'
     color+0x4a.3728
-    version+[0 1 0]
+    version+[0 2 0]
     website+''
     license+'MIT'
     base+'boox'
-    site+/apps/boox
+    glob-http+['https://pub-5eef062339ec4a0a8839cb95ec1a98a6.r2.dev/glob-0v4.gnuqo.ijav7.s853d.0k8sq.vsm1u.glob' 0v4.gnuqo.ijav7.s853d.0k8sq.vsm1u]
 ==

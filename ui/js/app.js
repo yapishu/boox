@@ -1,6 +1,6 @@
 // Boox - main application (Alex-inspired design)
 
-function toast(msg, type = 'info') {
+window.toast = function toast(msg, type = 'info') {
   let container = document.getElementById('toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -18,7 +18,7 @@ function toast(msg, type = 'info') {
   }, 3500);
 }
 
-const App = {
+window.App = {
   state: {
     books: [],
     view: 'library',
@@ -553,13 +553,13 @@ const App = {
     const view = document.getElementById('upload-view');
     view.innerHTML = `
       <div class="upload-panel">
-        <h2>Upload a Book</h2>
+        <h2>Upload Books</h2>
         <div class="drop-zone" id="drop-zone">
           <div class="drop-zone-content">
             <div class="drop-icon">\u{1F4C4}</div>
-            <p>Drag and drop a file here, or click to browse</p>
-            <p class="drop-hint">EPUB, PDF, MOBI, TXT, MD, HTML</p>
-            <input type="file" id="file-input"
+            <p>Drag and drop files here, or click to browse</p>
+            <p class="drop-hint">EPUB, PDF, MOBI, TXT, MD, HTML &mdash; select multiple files for bulk upload</p>
+            <input type="file" id="file-input" multiple
                    accept=".pdf,.epub,.mobi,.txt,.md,.html,.htm"
                    onchange="App.handleFileSelect(event)" hidden>
           </div>
@@ -574,14 +574,16 @@ const App = {
     dropZone.ondrop = (e) => {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
-      if (e.dataTransfer.files.length > 0) this.prepareUpload(e.dataTransfer.files[0]);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 1) this.prepareUpload(files[0]);
+      else if (files.length > 1) this.prepareBulkUpload(files);
     };
   },
 
   handleFileSelect(event) {
-    if (event.target.files.length > 0) {
-      this.prepareUpload(event.target.files[0]);
-    }
+    const files = Array.from(event.target.files);
+    if (files.length === 1) this.prepareUpload(files[0]);
+    else if (files.length > 1) this.prepareBulkUpload(files);
   },
 
   prepareUpload(file) {
@@ -745,6 +747,116 @@ const App = {
       btn.disabled = false;
       btn.textContent = 'Retry';
     }
+  },
+
+  // -- Bulk Upload --
+
+  prepareBulkUpload(files) {
+    const formats = { pdf: 'pdf', epub: 'epub', mobi: 'mobi', txt: 'txt', md: 'md', html: 'html', htm: 'html' };
+    const items = [];
+    const rejected = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const format = formats[ext];
+      if (format) {
+        items.push({ file, format, title: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ') });
+      } else {
+        rejected.push(file.name);
+      }
+    }
+    this._bulkItems = items;
+
+    const sizeTotal = items.reduce((s, i) => s + i.file.size, 0);
+    const sizeStr = sizeTotal > 1048576
+      ? (sizeTotal / 1048576).toFixed(1) + ' MB'
+      : (sizeTotal / 1024).toFixed(0) + ' KB';
+
+    const area = document.getElementById('upload-form-area');
+    area.innerHTML = `
+      <div class="upload-form-card">
+        <div class="bulk-summary">
+          <strong>${items.length} file${items.length !== 1 ? 's' : ''}</strong> ready (${sizeStr} total)
+          ${rejected.length ? `<div class="bulk-rejected">${rejected.length} unsupported: ${rejected.map(n => this.escapeHtml(n)).join(', ')}</div>` : ''}
+        </div>
+        <div class="bulk-file-list" id="bulk-file-list">
+          ${items.map((item, i) => `
+            <div class="bulk-file-row" id="bulk-row-${i}">
+              <span class="card-badge fmt-${item.format}" style="position:static">${item.format.toUpperCase()}</span>
+              <span class="bulk-file-name">${this.escapeHtml(item.file.name)}</span>
+              <span class="bulk-file-status" id="bulk-status-${i}">Pending</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="upload-form-actions">
+          <button class="btn" onclick="App.renderUploadView()">Cancel</button>
+          <button class="btn btn-primary" id="bulk-upload-btn" onclick="App.submitBulkUpload()">Upload All</button>
+        </div>
+      </div>
+    `;
+  },
+
+  async submitBulkUpload() {
+    const items = this._bulkItems;
+    if (!items || !items.length) return;
+
+    const btn = document.getElementById('bulk-upload-btn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading...';
+
+    let succeeded = 0;
+    let failed = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const statusEl = document.getElementById(`bulk-status-${i}`);
+      const rowEl = document.getElementById(`bulk-row-${i}`);
+
+      try {
+        if (statusEl) statusEl.textContent = 'Uploading...';
+        if (rowEl) rowEl.classList.add('bulk-active');
+
+        const result = await S3Upload.upload(item.file, (pct) => {
+          if (statusEl) statusEl.textContent = pct + '%';
+        });
+
+        if (statusEl) statusEl.textContent = 'Saving...';
+
+        const uvChars = '0123456789abcdefghijklmnopqrstuv';
+        const bytes = crypto.getRandomValues(new Uint8Array(20));
+        let raw = '';
+        for (const b of bytes) raw += uvChars[b & 31];
+        const groups = raw.match(/.{1,5}/g);
+        groups[0] = groups[0].replace(/^0+/, '') || '0';
+        const bookId = '0v' + groups.join('.');
+
+        await BooxAPI.addBook(bookId, {
+          title: item.title,
+          author: '',
+          format: item.format,
+          's3-url': result.url,
+          'cover-url': '',
+          'file-size': item.file.size,
+          tags: [],
+          description: ''
+        });
+
+        if (statusEl) { statusEl.textContent = '\u2713'; statusEl.classList.add('bulk-done'); }
+        if (rowEl) { rowEl.classList.remove('bulk-active'); rowEl.classList.add('bulk-done'); }
+        succeeded++;
+      } catch (e) {
+        if (statusEl) { statusEl.textContent = 'Failed'; statusEl.classList.add('bulk-error'); }
+        if (rowEl) { rowEl.classList.remove('bulk-active'); rowEl.classList.add('bulk-error'); }
+        failed++;
+      }
+    }
+
+    await this.loadBooks();
+
+    btn.textContent = `Done (${succeeded} uploaded${failed ? ', ' + failed + ' failed' : ''})`;
+    btn.onclick = () => this.showLibrary();
+    btn.disabled = false;
+    btn.classList.remove('btn-primary');
+    if (!failed) btn.classList.add('btn-primary');
   },
 
   // -- Collections --

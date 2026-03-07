@@ -1,7 +1,7 @@
 // S3 upload using system %storage credentials
 // Uses presigned URLs (AWS Signature V4) for uploads
 
-const S3Upload = {
+window.S3Upload = {
   config: null,
 
   async loadConfig() {

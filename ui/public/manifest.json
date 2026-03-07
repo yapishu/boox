@@ -1,0 +1,12 @@
+{
+  "name": "Boox",
+  "short_name": "Boox",
+  "start_url": "/apps/boox/",
+  "scope": "/apps/boox/",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#8b9cf7",
+  "icons": [
+    { "src": "/apps/boox/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
