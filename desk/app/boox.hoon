@@ -186,7 +186,7 @@
 --
 ::
 %-  agent:dbug
-=|  state-2:boox
+=|  state-3:boox
 =*  state  -
 =/  remote-cache  *(map @p json)
 %+  verb  |
@@ -207,16 +207,19 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state:boox vase)
   ?-  -.old
-      %2  `this(state old)
+      %3  `this(state old)
+  ::
+      %2
+    `this(state [%3 books.old positions.old book-order.old collections.old pending.old %.n])
   ::
       %1
-    `this(state [%2 books.old positions.old book-order.old collections.old ~])
+    `this(state [%3 books.old positions.old book-order.old collections.old ~ %.n])
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    `this(state [%2 books.old positions.old book-order.old new-colls ~])
+    `this(state [%3 books.old positions.old book-order.old new-colls ~ %.n])
   ==
 ::
 ++  on-init
@@ -262,6 +265,10 @@
         %request-shared  !!
         %shared-data     !!
         %receive-book    !!
+    ::
+        %toggle-opds
+      =.  opds-enabled  !opds-enabled
+      `this
     ::
         %add-book
       =/  bid  book-id.act
@@ -410,6 +417,29 @@
       `this
     ==
   ::
+  ++  check-basic-auth
+    |=  headers=(list [key=@t value=@t])
+    ^-  ?
+    =/  auth-header=(unit @t)
+      %-  ~(rep by (malt headers))
+      |=  [[key=@t val=@t] found=(unit @t)]
+      ?^  found  found
+      ?.  =('authorization' (cass:so (trip key)))  found
+      `val
+    ?~  auth-header  %.n
+    =/  val=tape  (trip u.auth-header)
+    ?.  =("Basic " (scag 6 val))  %.n
+    =/  encoded=tape  (slag 6 val)
+    =/  decoded=(unit octs)  (de:base64:mimes:html (crip encoded))
+    ?~  decoded  %.n
+    =/  cred=tape  (trip q.u.decoded)
+    =/  colon=(unit @ud)  (find ":" cred)
+    ?~  colon  %.n
+    =/  pass=tape  (slag +(u.colon) cred)
+    =/  code=@p
+      .^(@p %j /(scot %p our.bowl)/code/(scot %da now.bowl)/(scot %p our.bowl))
+    =(pass (trip (scot %p code)))
+  ::
   ++  handle-request-shared
     |=  requester=@p
     ^-  (quip card _this)
@@ -510,6 +540,30 @@
       :_  this
       %+  give-simple-payload:app:server  eyre-id
       (handle-public t.site)
+    ::  OPDS endpoints: basic auth, no cookie required
+    ::
+    ?:  ?=([%opds *] site)
+      ?.  opds-enabled
+        :_  this
+        %+  give-simple-payload:app:server  eyre-id
+        [[404 ~] `(as-octs:mimes:html 'OPDS not enabled')]
+      ?.  ?=(%'GET' method.request.req)
+        :_  this
+        %+  give-simple-payload:app:server  eyre-id
+        [[405 ~] ~]
+      ::  check cookie auth OR basic auth
+      ?.  ?|  authenticated.req
+              (check-basic-auth header-list.request.req)
+          ==
+        :_  this
+        %+  give-simple-payload:app:server  eyre-id
+        :_  ~
+        :-  401
+        :~  ['www-authenticate' 'Basic realm="Boox OPDS"']
+        ==
+      :_  this
+      %+  give-simple-payload:app:server  eyre-id
+      (handle-scry site)
     ::  all other endpoints require auth
     ::
     ?.  authenticated.req
@@ -865,6 +919,12 @@
           ==
       ==
     ::
+        [%settings ~]
+      %-  json-response:gen:server
+      %-  pairs:enjs:format
+      :~  ['opds-enabled' b+opds-enabled]
+      ==
+    ::
     ::  OPDS catalog feeds
     ::
         [%opds ~]
@@ -1010,6 +1070,9 @@
         ::
             %'unpublish-collection'
           [%unpublish-collection ((ot ~[name+so]) jon)]
+        ::
+            %'toggle-opds'
+          [%toggle-opds ~]
         ::
             %'browse-ship'
           [%browse-ship ((ot ~[ship+(se %p)]) jon)]

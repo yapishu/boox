@@ -1262,7 +1262,7 @@ const App = {
 
   // -- Settings --
 
-  showSettings() {
+  async showSettings() {
     this.state.view = 'settings';
     this.showDashboard();
     this.hideAllViews();
@@ -1274,6 +1274,14 @@ const App = {
     const s3Status = s3.accessKeyId
       ? `Connected \u2014 ${s3.bucket || 'no bucket'}`
       : 'Not configured';
+
+    let opdsEnabled = false;
+    try {
+      const settings = await BooxAPI.getSettings();
+      opdsEnabled = settings['opds-enabled'] || false;
+    } catch (e) {}
+
+    const opdsUrl = `${window.location.origin}/apps/boox/api/opds`;
 
     document.getElementById('settings-view').innerHTML = `
       <div class="settings-panel">
@@ -1291,12 +1299,42 @@ const App = {
           <p style="font-size:0.85rem">${this.state.books.length} book${this.state.books.length !== 1 ? 's' : ''}</p>
         </div>
         <div class="settings-section">
+          <h3>OPDS Catalog</h3>
+          <p class="settings-hint">
+            Serve your library as an OPDS feed for e-reader apps (KOReader, Calibre, Moon+ Reader, etc).
+            Uses HTTP Basic Auth with your +code as the password.
+          </p>
+          <label class="toggle-row">
+            <span>Enable OPDS</span>
+            <button class="toggle-btn ${opdsEnabled ? 'active' : ''}" onclick="App.toggleOpds()">${opdsEnabled ? 'On' : 'Off'}</button>
+          </label>
+          ${opdsEnabled ? `
+            <div style="margin-top:0.75rem">
+              <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.25rem">Feed URL:</p>
+              <div style="display:flex;gap:0.5rem">
+                <input type="text" readonly value="${this.escapeHtml(opdsUrl)}" class="public-link-input" id="opds-url-input" style="flex:1">
+                <button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('opds-url-input').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1500)">Copy</button>
+              </div>
+              <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem">Username: anything &bull; Password: your +code</p>
+            </div>
+          ` : ''}
+        </div>
+        <div class="settings-section">
           <h3>Theme</h3>
           <p class="settings-hint">Current: ${this.state.theme === 'dark' ? 'Dark' : 'Light'}</p>
           <button class="btn" onclick="App.toggleTheme()">Toggle Theme</button>
         </div>
       </div>
     `;
+  },
+
+  async toggleOpds() {
+    try {
+      await BooxAPI.toggleOpds();
+      await this.showSettings();
+    } catch (e) {
+      toast('Failed to toggle OPDS: ' + e.message, 'error');
+    }
   },
 
   // -- Edit book --

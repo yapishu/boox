@@ -126,6 +126,14 @@ const BooxAPI = {
     return this.get('pending');
   },
 
+  // Get settings (opds-enabled, etc)
+  getSettings() { return this.get('settings'); },
+
+  // Toggle OPDS on/off
+  toggleOpds() {
+    return this.poke({ action: 'toggle-opds' });
+  },
+
   // Dismiss (reject) a pending book
   dismissPending(pid) {
     return this.poke({ action: 'dismiss-pending', pid });

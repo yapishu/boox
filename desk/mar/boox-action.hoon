@@ -103,6 +103,9 @@
         %'unpublish-collection'
       [%unpublish-collection ((ot ~[name+so]) jon)]
     ::
+        %'toggle-opds'
+      [%toggle-opds ~]
+    ::
         %'browse-ship'
       [%browse-ship ((ot ~[ship+(se %p)]) jon)]
     ::

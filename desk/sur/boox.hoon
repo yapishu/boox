@@ -81,10 +81,21 @@
       pending=(map @uv pending-book)
   ==
 ::
++$  state-3
+  $:  %3
+      books=(map book-id book)
+      positions=(map book-id position)
+      book-order=(list book-id)
+      collections=(map @t collection)
+      pending=(map @uv pending-book)
+      opds-enabled=?
+  ==
+::
 +$  versioned-state
   $%  state-0
       state-1
       state-2
+      state-3
   ==
 ::
 ::  poke actions
@@ -105,6 +116,8 @@
       [%unshare-collection name=@t]
       [%publish-collection name=@t]
       [%unpublish-collection name=@t]
+      ::  settings
+      [%toggle-opds ~]
       ::  social: owner-initiated
       [%browse-ship ship=@p]
       [%send-book =book-id to=@p]
