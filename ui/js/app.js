@@ -869,8 +869,9 @@ window.App = {
     document.getElementById('filters-bar').classList.add('hidden');
     this.setActiveNav('collections');
     await this.loadCollections();
-    this.loadPals();
+    await this.loadPals();
     this.renderCollections();
+    this.filterPals();
     this.loadPending();
   },
 
@@ -881,6 +882,35 @@ window.App = {
     } catch (e) {
       this.state.pals = [];
     }
+  },
+
+  filterPals() {
+    const el = document.getElementById('pals-list');
+    if (!el) return;
+    const pals = this.state.pals;
+    if (pals.length === 0) {
+      el.innerHTML = '<p style="color:var(--text-muted);font-size:0.8rem">No pals or contacts found.</p>';
+      return;
+    }
+    const input = document.getElementById('friend-ship');
+    const filter = (input ? input.value : '').replace(/^~?/, '~').toLowerCase();
+    const filtered = filter.length > 1
+      ? pals.filter(s => s.includes(filter))
+      : pals;
+    const shown = filtered.slice(0, 10);
+    const remaining = filtered.length - shown.length;
+    let html = '<div style="display:flex;flex-wrap:wrap;gap:0.375rem;margin-bottom:0.5rem">';
+    html += shown.map(p =>
+      `<button class="btn btn-sm" onclick="document.getElementById('friend-ship').value='${this.escapeHtml(p)}'; App.browseFriend();">${this.escapeHtml(p)}</button>`
+    ).join('');
+    html += '</div>';
+    if (remaining > 0) {
+      html += `<p style="color:var(--text-muted);font-size:0.75rem">${remaining} more — type to filter</p>`;
+    }
+    if (filter.length > 1 && filtered.length === 0) {
+      html = '<p style="color:var(--text-muted);font-size:0.8rem">No matching peers</p>';
+    }
+    el.innerHTML = html;
   },
 
   renderCollections() {
@@ -933,21 +963,14 @@ window.App = {
         <div class="collections-section" style="margin-top:2rem">
           <div class="section-label">Browse Pals</div>
           <div class="browse-friends">
-            <p class="settings-hint">Browse shared collections from your %pals mutuals.</p>
-            ${this.state.pals.length > 0 ? `
-              <div style="display:flex;flex-wrap:wrap;gap:0.375rem;margin-bottom:1rem">
-                ${this.state.pals.map(p => `
-                  <button class="btn btn-sm" onclick="document.getElementById('friend-ship').value='${this.escapeHtml(p)}'; App.browseFriend();">${this.escapeHtml(p)}</button>
-                `).join('')}
-              </div>
-            ` : `
-              <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:0.75rem">No %pals mutuals found. Install %pals to discover friends.</p>
-            `}
-            <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+            <p class="settings-hint">Browse shared collections from your pals and contacts.</p>
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
               <input type="text" id="friend-ship" class="search-input" style="max-width:none;flex:1;padding-left:0.75rem"
-                     placeholder="~sampel-palnet" value="${this.escapeHtml(localStorage.getItem('boox-last-friend-ship') || '')}">
+                     placeholder="~sampel-palnet" value="${this.escapeHtml(localStorage.getItem('boox-last-friend-ship') || '')}"
+                     oninput="App.filterPals()">
               <button class="btn btn-primary btn-sm" onclick="App.browseFriend()">Browse</button>
             </div>
+            <div id="pals-list"></div>
             <div id="friend-results"></div>
           </div>
         </div>
@@ -1329,22 +1352,13 @@ window.App = {
         <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem">
           Send "${this.escapeHtml(book.title)}" to a %pals mutual. They'll need to accept the import.
         </p>
-        ${this.state.pals.length > 0 ? `
-          <div class="form-group">
-            <label>Your Pals</label>
-            <div style="display:flex;flex-wrap:wrap;gap:0.375rem">
-              ${this.state.pals.map(p => `
-                <button class="btn btn-sm" onclick="document.getElementById('send-to-ship').value='${this.escapeHtml(p)}';">${this.escapeHtml(p)}</button>
-              `).join('')}
-            </div>
-          </div>
-        ` : `
-          <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:0.75rem">No %pals mutuals found. You can still enter a @p manually.</p>
-        `}
         <div class="form-group">
           <label>Ship (@p)</label>
-          <input type="text" id="send-to-ship" placeholder="~sampel-palnet" value="${this.escapeHtml(localStorage.getItem('boox-last-send-ship') || '')}">
+          <input type="text" id="send-to-ship" placeholder="~sampel-palnet"
+                 value="${this.escapeHtml(localStorage.getItem('boox-last-send-ship') || '')}"
+                 oninput="App.filterSendPals()">
         </div>
+        <div id="send-pals-list"></div>
         <div class="modal-actions">
           <button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
           <button class="btn btn-primary" onclick="App.doSendToFriend('${bookId}')">Send</button>
@@ -1353,7 +1367,37 @@ window.App = {
     `;
     document.body.appendChild(modal);
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    this.filterSendPals();
     document.getElementById('send-to-ship').focus();
+  },
+
+  filterSendPals() {
+    const el = document.getElementById('send-pals-list');
+    if (!el) return;
+    const pals = this.state.pals;
+    if (pals.length === 0) {
+      el.innerHTML = '<p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:0.5rem">No pals or contacts found. Enter a @p manually.</p>';
+      return;
+    }
+    const input = document.getElementById('send-to-ship');
+    const filter = (input ? input.value : '').replace(/^~?/, '~').toLowerCase();
+    const filtered = filter.length > 1
+      ? pals.filter(s => s.includes(filter))
+      : pals;
+    const shown = filtered.slice(0, 10);
+    const remaining = filtered.length - shown.length;
+    let html = '<div style="display:flex;flex-wrap:wrap;gap:0.375rem;margin-bottom:0.5rem">';
+    html += shown.map(p =>
+      `<button class="btn btn-sm" onclick="document.getElementById('send-to-ship').value='${this.escapeHtml(p)}';">${this.escapeHtml(p)}</button>`
+    ).join('');
+    html += '</div>';
+    if (remaining > 0) {
+      html += `<p style="color:var(--text-muted);font-size:0.75rem">${remaining} more — type to filter</p>`;
+    }
+    if (filter.length > 1 && filtered.length === 0) {
+      html = '';
+    }
+    el.innerHTML = html;
   },
 
   async doSendToFriend(bookId) {

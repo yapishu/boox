@@ -929,12 +929,24 @@
       ==
     ::
         [%pals ~]
-      =/  ships=(list @p)
+      =/  pals=(set @p)
         =/  res=(unit (set @p))
           %-  mole
           |.(.^((set @p) %gx /(scot %p our.bowl)/pals/(scot %da now.bowl)/mutuals/noun))
         ?~  res  ~
-        ~(tap in u.res)
+        u.res
+      =/  contacts=(set @p)
+        =/  res=(unit (map * *))
+          %-  mole
+          |.(.^((map * *) %gx /(scot %p our.bowl)/contacts/(scot %da now.bowl)/v1/book/noun))
+        ?~  res  ~
+        %-  silt
+        %+  murn  ~(tap in ~(key by u.res))
+        |=(k=* ?@(k (some `@p`k) ~))
+      ::  combine, deduplicate, filter to planets+
+      =/  ships=(list @p)
+        %+  skim  ~(tap in (~(uni in pals) contacts))
+        |=(s=@p (lth `@`s (bex 32)))
       %-  json-response:gen:server
       %-  pairs:enjs:format
       :~  :-  'pals'
