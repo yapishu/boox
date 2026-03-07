@@ -1,4 +1,6 @@
-# Boox
+# %boox
+
+<img width="946" height="599" alt="image" src="https://github.com/user-attachments/assets/26be4077-fbdc-45d1-85ed-b7cb5fd231e4" />
 
 An ebook reader and library manager for Urbit. Upload books to S3, read them in-browser, track your progress, and share collections with other ships.
 
@@ -11,6 +13,8 @@ An ebook reader and library manager for Urbit. Upload books to S3, read them in-
 - **OPDS catalog** — expose your library to any OPDS-compatible reader (with Basic Auth)
 - **Bulk upload** — add multiple books at once
 - **PWA** — installable as a standalone app on mobile/desktop
+
+<img width="816" height="537" alt="image" src="https://github.com/user-attachments/assets/955311cf-ee9c-47d1-b832-3cf7a6474558" />
 
 ## Structure
 
