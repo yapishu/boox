@@ -360,7 +360,7 @@ body {
 /* ── Book grid ── */
 .book-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 200px));
   gap: 1.25rem;
 }
 
@@ -373,16 +373,13 @@ body {
 
 .book-cover {
   position: relative;
+  width: 100%;
   aspect-ratio: 2/3;
   border-radius: var(--radius);
   background: var(--cover-bg);
-  background-size: cover;
-  background-position: center;
   overflow: hidden;
   margin-bottom: 0.5rem;
   border: 1px solid var(--border);
-  min-height: 0;
-  max-height: 100%;
 }
 .book-cover-placeholder {
   display: flex;
@@ -1334,7 +1331,7 @@ body {
 }
 
 @media (min-width: 1024px) {
-  .book-grid { grid-template-columns: repeat(5, 1fr); }
+  .book-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 200px)); }
 }
 
 /* ── Toast notifications ── */
