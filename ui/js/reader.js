@@ -23,6 +23,9 @@ window.Reader = {
   },
 
   async open(book) {
+    if (book['s3-url'] && !/^https?:\/\//.test(book['s3-url'])) {
+      book['s3-url'] = 'https://' + book['s3-url'];
+    }
     this.currentBook = book;
     this.container = document.getElementById('reader-container');
     this.container.innerHTML = '';
@@ -404,7 +407,8 @@ window.Reader = {
       width: '100%',
       height: '100%',
       spread: 'none',
-      flow: 'paginated'
+      flow: 'paginated',
+      allowScriptedContent: true
     });
 
     // Restore position

@@ -76,10 +76,18 @@ window.App = {
 
   // -- Data --
 
+  _fixUrl(u) {
+    return u && !/^https?:\/\//.test(u) ? 'https://' + u : u;
+  },
+
   async loadBooks() {
     try {
       const data = await BooxAPI.getBooks();
-      this.state.books = data.books || [];
+      this.state.books = (data.books || []).map(b => {
+        if (b['s3-url']) b['s3-url'] = this._fixUrl(b['s3-url']);
+        if (b['cover-url']) b['cover-url'] = this._fixUrl(b['cover-url']);
+        return b;
+      });
     } catch (e) {
       console.error('Failed to load books:', e);
     }
