@@ -213,9 +213,10 @@
   ::  re-bind first to claim the duct, then disconnect to free for docket
   ::
   =/  cleanup=(list card)
-    :~  [%pass /eyre/connect %arvo %e %connect [~ /apps/boox] dap.bowl]
-        [%pass /eyre/connect %arvo %e %disconnect [~ /apps/boox]]
-        ::  re-bind our API endpoint
+    :~  ::  claim then release stale /apps/boox binding so docket can serve
+        [%pass /eyre/takeover %arvo %e %connect [~ /apps/boox] dap.bowl]
+        [%pass /eyre/takeover %arvo %e %disconnect [~ /apps/boox]]
+        ::  bind our API endpoint
         [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
   ?-  -.old
@@ -246,7 +247,7 @@
 ++  on-init
   ^-  (quip card _this)
   :_  this
-  :~  ::  take over stale /apps/boox binding, then release it for docket
+  :~  ::  claim then release stale /apps/boox binding so docket can serve
       [%pass /eyre/takeover %arvo %e %connect [~ /apps/boox] dap.bowl]
       [%pass /eyre/takeover %arvo %e %disconnect [~ /apps/boox]]
       ::  bind our API endpoint
@@ -575,10 +576,17 @@
     =/  rl=request-line:server
       (parse-request-line:server url.request.req)
     =/  site=(list @t)  site.rl
-    =/  site=(list @t)
-      ?.  ?=([%apps %boox %api *] site)
-        site
-      t.t.t.site
+    ::  redirect non-API requests to /apps/boox/ for docket
+    ::
+    ?.  ?=([%apps %boox %api *] site)
+      :_  this
+      %+  give-simple-payload:app:server  eyre-id
+      :_  ~
+      :-  301
+      :~  ['location' '/apps/boox/']
+          ['cache-control' 'no-cache']
+      ==
+    =/  site=(list @t)  t.t.t.site
     ::  re-attach extension to last segment for API routes
     =/  site=(list @t)
       ?~  ext.rl  site

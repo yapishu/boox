@@ -318,7 +318,25 @@ body {
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all var(--transition);
+  position: relative;
 }
+.now-reading-dismiss {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.now-reading-card:hover .now-reading-dismiss { opacity: 1; }
+.now-reading-dismiss:hover { color: var(--text-primary); background: var(--bg-secondary); }
 .now-reading-card:hover {
   border-color: var(--border-hover);
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -355,6 +373,43 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+/* ── Library header ── */
+.library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+.per-page-select {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.per-page-select select {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.15rem 0.35rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* ── Pagination ── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.25rem 0 0.5rem;
+}
+.page-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 /* ── Book grid ── */

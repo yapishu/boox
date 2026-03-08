@@ -29,6 +29,8 @@ window.App = {
     filterFormat: '',
     filterStatus: '',
     sortBy: 'recent',
+    page: 1,
+    perPage: parseInt(localStorage.getItem('boox-per-page') || '20'),
     collections: {},
     pendingItems: [],
     pals: [],
@@ -249,6 +251,7 @@ window.App = {
     if (type === 'format') this.state.filterFormat = value;
     else if (type === 'status') this.state.filterStatus = value;
     else if (type === 'sort') this.state.sortBy = value;
+    this.state.page = 1;
     this.renderFilters();
     this.renderLibrary();
   },
@@ -324,6 +327,12 @@ window.App = {
       `;
     }
 
+    // Pagination
+    const perPage = this.state.perPage;
+    const page = this.state.page;
+    const totalPages = Math.ceil(books.length / perPage);
+    const pageBooks = books.slice((page - 1) * perPage, page * perPage);
+
     // Main grid
     if (books.length === 0) {
       html += `
@@ -333,11 +342,26 @@ window.App = {
       `;
     } else {
       html += `
-        <div class="section-label">${books.length} book${books.length !== 1 ? 's' : ''}</div>
+        <div class="library-header">
+          <div class="section-label">${books.length} book${books.length !== 1 ? 's' : ''}</div>
+          <div class="per-page-select">
+            <select onchange="App.setPerPage(+this.value)">
+              ${[10, 20, 50].map(n => `<option value="${n}" ${n === perPage ? 'selected' : ''}>${n}</option>`).join('')}
+            </select>
+            <span>per page</span>
+          </div>
+        </div>
         <div class="book-grid">
-          ${books.map(book => this.renderBookCard(book)).join('')}
+          ${pageBooks.map(book => this.renderBookCard(book)).join('')}
         </div>
       `;
+      if (totalPages > 1) {
+        html += `<div class="pagination">`;
+        html += `<button class="btn btn-sm" onclick="App.goPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>&lsaquo; Prev</button>`;
+        html += `<span class="page-info">Page ${page} of ${totalPages}</span>`;
+        html += `<button class="btn btn-sm" onclick="App.goPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>Next &rsaquo;</button>`;
+        html += `</div>`;
+      }
     }
 
     container.innerHTML = html;
@@ -351,6 +375,7 @@ window.App = {
 
     return `
       <div class="now-reading-card" onclick="App.openBook('${book.id}')">
+        <button class="now-reading-dismiss" onclick="event.stopPropagation();App.dismissNowReading('${book.id}')" title="Dismiss">&times;</button>
         <div class="now-reading-cover" style="${coverStyle}">
           ${!book['cover-url'] ? `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:0.6rem;color:var(--text-muted);padding:0.25rem;text-align:center">${this.escapeHtml(book.title).slice(0, 20)}</div>` : ''}
         </div>
@@ -516,6 +541,30 @@ window.App = {
     document.getElementById('library-view').classList.remove('hidden');
     this.setActiveNav('library');
     this.renderLibrary();
+  },
+
+  async dismissNowReading(bookId) {
+    try {
+      await BooxAPI.setPosition(bookId, '', 0);
+      const book = this.state.books.find(b => b.id === bookId);
+      if (book && book.position) book.position.progress = 0;
+      this.renderLibrary();
+    } catch (e) {
+      console.error('Failed to dismiss:', e);
+    }
+  },
+
+  setPerPage(n) {
+    this.state.perPage = n;
+    this.state.page = 1;
+    localStorage.setItem('boox-per-page', n);
+    this.renderLibrary();
+  },
+
+  goPage(n) {
+    this.state.page = Math.max(1, n);
+    this.renderLibrary();
+    document.getElementById('library-container')?.scrollIntoView({ behavior: 'smooth' });
   },
 
   // -- Reader --
@@ -1786,6 +1835,7 @@ window.App = {
 
   onSearch(query) {
     this.state.searchQuery = query;
+    this.state.page = 1;
     this.renderLibrary();
   },
 

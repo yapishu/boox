@@ -45,6 +45,10 @@ window.Reader = {
   },
 
   close() {
+    if (this._keyHandler) {
+      document.removeEventListener('keydown', this._keyHandler);
+      this._keyHandler = null;
+    }
     if (this.rendition) {
       this.rendition.destroy();
       this.rendition = null;
@@ -457,11 +461,17 @@ window.Reader = {
       this._showNotationPopup(cfiRange, text);
     });
 
-    // Keyboard nav
+    // Keyboard nav (iframe + outer document)
     this.rendition.on('keyup', (e) => {
       if (e.key === 'ArrowRight' || e.key === ' ') this.rendition.next();
       if (e.key === 'ArrowLeft') this.rendition.prev();
     });
+    this._keyHandler = (e) => {
+      if (!this.rendition) return;
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); this.rendition.next(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); this.rendition.prev(); }
+    };
+    document.addEventListener('keydown', this._keyHandler);
 
     // Tap zones: left 25% = prev, right 25% = next
     this.container.addEventListener('click', (e) => {
