@@ -906,7 +906,7 @@
           "+(n.note?'<div style=\"font-size:.85rem;margin-bottom:8px\">'+e(n.note)+'</div>':'')+"
           "'<button onclick=\"this.parentElement.remove()\" style=\"background:none;border:1px solid #2A2A28;color:#E8E8E6;padding:4px 12px;border-radius:4px;cursor:pointer\">Close</button>';"
           "document.body.appendChild(p)},"
-          "'boox-highlight')}catch(ex)\{}})}});"
+          "'boox-highlight')}catch(ex)\{}})});"
           "if(pos)REND.display(decodeURIComponent(pos));else REND.display();"
           "document.getElementById('reader-prev').style.display='';"
           "document.getElementById('reader-next').style.display=''}"
