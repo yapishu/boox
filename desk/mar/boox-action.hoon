@@ -106,6 +106,16 @@
         %'toggle-readable'
       [%toggle-readable ((ot ~[name+so]) jon)]
     ::
+        %'add-notation'
+      =/  f  (ot ~[book-id+(se %uv) nid+(se %uv) anchor+so selected+so note+so])
+      =/  [bid=@uv nid=@uv anchor=@t selected=@t note=@t]  (f jon)
+      [%add-notation bid nid [anchor selected note *@da]]
+    ::
+        %'remove-notation'
+      =/  f  (ot ~[book-id+(se %uv) nid+(se %uv)])
+      =/  [bid=@uv nid=@uv]  (f jon)
+      [%remove-notation bid nid]
+    ::
         %'toggle-opds'
       [%toggle-opds ~]
     ::

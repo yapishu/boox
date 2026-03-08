@@ -186,7 +186,7 @@
 --
 ::
 %-  agent:dbug
-=|  state-5:boox
+=|  state-6:boox
 =*  state  -
 =/  remote-cache  *(map @p json)
 %+  verb  |
@@ -219,25 +219,28 @@
         [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
   ?-  -.old
-      %5  [cleanup this(state old)]
+      %6  [cleanup this(state old)]
+  ::
+      %5
+    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old ~])]
   ::
       %4
-    [cleanup this(state [%5 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~])]
+    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~ ~])]
   ::
       %3
-    [cleanup this(state [%5 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~])]
+    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~ ~])]
   ::
       %2
-    [cleanup this(state [%5 books.old positions.old book-order.old collections.old pending.old %.n '' ~])]
+    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old %.n '' ~ ~])]
   ::
       %1
-    [cleanup this(state [%5 books.old positions.old book-order.old collections.old ~ %.n '' ~])]
+    [cleanup this(state [%6 books.old positions.old book-order.old collections.old ~ %.n '' ~ ~])]
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    [cleanup this(state [%5 books.old positions.old book-order.old new-colls ~ %.n '' ~])]
+    [cleanup this(state [%6 books.old positions.old book-order.old new-colls ~ %.n '' ~ ~])]
   ==
 ::
 ++  on-init
@@ -310,6 +313,7 @@
       =/  bid  book-id.act
       =.  books      (~(del by books) bid)
       =.  positions  (~(del by positions) bid)
+      =.  notations  (~(del by notations) bid)
       =.  book-order  (skip book-order |=(b=book-id:boox =(b bid)))
       =.  collections
         %-  ~(run by collections)
@@ -425,6 +429,20 @@
         (~(put in readable-colls) name.act)
       `this
     ::
+        %add-notation
+      =/  book-notes=(map @uv notation:boox)
+        (~(gut by notations) book-id.act *(map @uv notation:boox))
+      =.  notations
+        (~(put by notations) book-id.act (~(put by book-notes) nid.act notation.act(created-at now.bowl)))
+      `this
+    ::
+        %remove-notation
+      =/  book-notes=(map @uv notation:boox)
+        (~(gut by notations) book-id.act *(map @uv notation:boox))
+      =.  notations
+        (~(put by notations) book-id.act (~(del by book-notes) nid.act))
+      `this
+    ::
         %browse-ship
       :_  this
       :~  :*  %pass  /browse/(scot %p ship.act)
@@ -523,6 +541,8 @@
             |=  bid=book-id:boox
             =/  bk=(unit book:boox)  (~(get by books) bid)
             ?~  bk  ~
+            =/  notes=(map @uv notation:boox)
+              (~(gut by notations) bid *(map @uv notation:boox))
             :-  ~
             %-  pairs:enjs:format
             :~  ['id' s+(scot %uv bid)]
@@ -534,6 +554,15 @@
                 ['file-size' (numb:enjs:format file-size.u.bk)]
                 ['description' s+description.u.bk]
                 ['tags' [%a (turn ~(tap in tags.u.bk) |=(t=@t s+t))]]
+                :-  'notations'
+                :-  %a
+                %+  turn  ~(tap by notes)
+                |=  [nid=@uv n=notation:boox]
+                %-  pairs:enjs:format
+                :~  ['anchor' s+anchor.n]
+                    ['selected' s+selected.n]
+                    ['note' s+note.n]
+                ==
             ==
         ==
     ==
@@ -711,6 +740,8 @@
           :-  %a
           %+  turn  coll-books
           |=  [bid=book-id:boox bk=book:boox]
+          =/  notes=(map @uv notation:boox)
+            (~(gut by notations) bid *(map @uv notation:boox))
           %-  pairs:enjs:format
           :~  ['id' s+(scot %uv bid)]
               ['title' s+title.bk]
@@ -724,6 +755,16 @@
               ['date-added' (sect:enjs:format date-added.bk)]
               ['description' s+description.bk]
               ['tags' [%a (turn ~(tap in tags.bk) |=(t=@t s+t))]]
+              :-  'notations'
+              :-  %a
+              %+  turn  ~(tap by notes)
+              |=  [nid=@uv n=notation:boox]
+              %-  pairs:enjs:format
+              :~  ['id' s+(scot %uv nid)]
+                  ['anchor' s+anchor.n]
+                  ['selected' s+selected.n]
+                  ['note' s+note.n]
+              ==
           ==
       ==
     ::
@@ -748,7 +789,7 @@
           "body\{font-family:'Hanken Grotesk',-apple-system,system-ui,sans-serif;"
           "background:#0F0F0F;color:#E8E8E6;min-height:100vh;padding:2rem 1.5rem;"
           "-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.5}"
-          ".w\{max-width:900px;margin:0 auto}"
+          ".w\{max-width:900px;margin:0 auto;overflow:hidden}"
           ".sh\{color:#5A5A58;font-size:.8rem;font-family:monospace;margin-bottom:.25rem}"
           "h1\{font-size:1.5rem;font-weight:600;margin-bottom:.25rem;letter-spacing:-.02em}"
           ".dc\{color:#8A8A87;margin-bottom:2rem;font-size:.9rem}"
@@ -756,7 +797,7 @@
           ".c\{cursor:pointer;transition:transform 150ms ease}.c:hover\{transform:translateY(-2px)}"
           ".cv\{aspect-ratio:2/3;background:#1E1E1C;border-radius:8px;overflow:hidden;"
           "position:relative;border:1px solid #2A2A28;margin-bottom:.5rem}"
-          ".cv img\{width:100%;height:100%;object-fit:cover}"
+          ".cv img\{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}"
           ".ph\{display:flex;align-items:center;justify-content:center;height:100%;"
           "padding:.75rem;text-align:center;font-size:.8rem;font-weight:600;color:#E8E8E6;line-height:1.3}"
           ".bg\{position:absolute;bottom:.4rem;right:.4rem;background:rgba(0,0,0,.6);"
@@ -776,16 +817,23 @@
           "#reader-overlay\{position:fixed;top:0;left:0;right:0;bottom:0;background:#0F0F0F;"
           "z-index:1000;display:none;flex-direction:column}"
           "#reader-overlay.open\{display:flex}"
-          ".rbar\{display:flex;align-items:center;padding:.75rem 1rem;gap:.75rem;"
-          "border-bottom:1px solid #2A2A28;flex-shrink:0}"
-          ".rbar button\{background:none;border:none;color:#E8E8E6;font-size:1.5rem;cursor:pointer;padding:.25rem .5rem}"
+          ".rbar\{display:flex;align-items:center;padding:.75rem 1rem;gap:.5rem;"
+          "border-bottom:1px solid #2A2A28;flex-shrink:0;overflow:hidden}"
+          ".rbar button\{background:none;border:none;color:#E8E8E6;font-size:1.25rem;cursor:pointer;"
+          "padding:.25rem .4rem;flex-shrink:0}"
           ".rbar .rtitle\{font-size:.85rem;color:#8A8A87;overflow:hidden;"
-          "text-overflow:ellipsis;white-space:nowrap;flex:1}"
-          ".rbar a\{color:#8A8A87;font-size:.75rem;text-decoration:none;white-space:nowrap}"
+          "text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}"
+          ".rbar a\{color:#8A8A87;font-size:.75rem;text-decoration:none;white-space:nowrap;flex-shrink:0}"
           ".rbar a:hover\{color:#E8E8E6}"
           "#reader-content\{flex:1;overflow:auto}"
           ".pdf-pg\{display:flex;justify-content:center;padding:1rem}"
           ".pdf-pg canvas\{max-width:100%;height:auto}"
+          ".boox-highlight\{background:rgba(251,191,36,.3);cursor:pointer;border-radius:2px}"
+          "@media(max-width:768px)\{body\{padding:1rem .75rem}"
+          ".g\{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.75rem}"
+          ".rbar\{padding:.5rem;gap:.35rem}"
+          ".rbar button\{font-size:1rem;padding:.2rem .3rem}"
+          ".rbar a\{font-size:.65rem}}"
           "</style></head><body><div class=w id=app>"
           "<div class=ld>Loading collection...</div></div>"
           "<div id=reader-overlay><div class=rbar>"
@@ -798,7 +846,7 @@
           "<script>"
           "pdfjsLib.GlobalWorkerOptions.workerSrc="
           "'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';"
-          "var BKS=[],REND=null;"
+          "var BKS=[],REND=null,CUR_IDX=-1;"
           "fetch('"
           api-path
           "').then(function(r)\{if(!r.ok)throw new Error('Not found');return r.json()})"
@@ -822,21 +870,44 @@
           "h+='<div class=a>'+e(b.author||'Unknown')+'</div></div></div>';"
           "});"
           "h+='</div><div class=pw>Shared via <a href=https://urbit.org>Urbit</a> / Boox</div>';"
-          "a.innerHTML=h})"
+          "a.innerHTML=h;"
+          "var hp=new URLSearchParams(location.hash.slice(1));"
+          "if(hp.get('read')!=null&&d.readable)openBook(parseInt(hp.get('read')),hp.get('pos'))})"
           ".catch(function(x)\{document.getElementById('app').innerHTML='<div class=er>'+e(x.message)+'</div>'});"
           "function e(s)\{if(!s)return '';var d=document.createElement('div');d.textContent=s;return d.innerHTML}"
-          "function openBook(i)\{"
+          "document.addEventListener('keydown',function(ev)\{"
+          "if(!REND)return;"
+          "if(ev.key==='ArrowRight'||ev.key===' ')\{ev.preventDefault();REND.next()}"
+          "if(ev.key==='ArrowLeft')\{ev.preventDefault();REND.prev()}"
+          "if(ev.key==='Escape')closeReader()});"
+          "function openBook(i,pos)\{"
           "var b=BKS[i],u=b['s3-url'],f=b.format,ov=document.getElementById('reader-overlay'),"
-          "rc=document.getElementById('reader-content');"
+          "rc=document.getElementById('reader-content');CUR_IDX=i;"
           "document.getElementById('reader-title').textContent=b.title;"
           "var dl=document.getElementById('reader-dl');"
           "dl.href=u;dl.style.display=u?'':'none';"
           "rc.innerHTML='<div class=ld>Loading...</div>';"
-          "ov.classList.add('open');"
+          "ov.classList.add('open');location.hash='read='+i;"
           "if(f==='epub')\{var book=ePub(u);"
           "rc.innerHTML='';REND=book.renderTo(rc,\{width:'100%',height:'100%',spread:'none'});"
-          "REND.themes.default(\{body:\{color:'#E8E8E6','background-color':'#0F0F0F'},'a':\{color:'#8A8A87'}});"
-          "REND.display();"
+          "REND.themes.default(\{body:\{color:'#E8E8E6','background-color':'#0F0F0F'},'a':\{color:'#8A8A87'},'.boox-highlight':\{background:'rgba(251,191,36,.3)',cursor:'pointer','border-radius':'2px'}});"
+          "REND.on('keyup',function(ev)\{"
+          "if(ev.key==='ArrowRight'||ev.key===' ')REND.next();"
+          "if(ev.key==='ArrowLeft')REND.prev()});"
+          "REND.on('relocated',function(loc)\{"
+          "if(loc&&loc.start)location.hash='read='+CUR_IDX+'&pos='+encodeURIComponent(loc.start.cfi)});"
+          "REND.on('started',function()\{"
+          "if(b.notations)(b.notations).forEach(function(n)\{"
+          "try\{REND.annotations.highlight(n.anchor,\{},"
+          "function()\{var p=document.createElement('div');"
+          "p.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;"
+          "background:#1A1A18;border:1px solid #2A2A28;border-radius:8px;padding:12px;width:280px;box-shadow:0 8px 24px rgba(0,0,0,.3)';"
+          "p.innerHTML='<div style=\"font-style:italic;color:#8A8A87;font-size:.8rem;border-left:2px solid #3A3A38;padding-left:8px;margin-bottom:8px\">\"'+e(n.selected).slice(0,200)+'\"</div>'"
+          "+(n.note?'<div style=\"font-size:.85rem;margin-bottom:8px\">'+e(n.note)+'</div>':'')+"
+          "'<button onclick=\"this.parentElement.remove()\" style=\"background:none;border:1px solid #2A2A28;color:#E8E8E6;padding:4px 12px;border-radius:4px;cursor:pointer\">Close</button>';"
+          "document.body.appendChild(p)},"
+          "'boox-highlight')}catch(ex)\{}})}});"
+          "if(pos)REND.display(decodeURIComponent(pos));else REND.display();"
           "document.getElementById('reader-prev').style.display='';"
           "document.getElementById('reader-next').style.display=''}"
           "else if(f==='pdf')\{"
@@ -852,7 +923,8 @@
           "else\{window.open(u,'_blank');ov.classList.remove('open')}}"
           "function readerPrev()\{if(REND)REND.prev()}"
           "function readerNext()\{if(REND)REND.next()}"
-          "function closeReader()\{REND=null;"
+          "function closeReader()\{if(REND)\{REND.destroy();REND=null}"
+          "CUR_IDX=-1;history.replaceState(null,'',location.pathname);"
           "document.getElementById('reader-overlay').classList.remove('open');"
           "document.getElementById('reader-content').innerHTML='';"
           "document.getElementById('reader-prev').style.display='none';"
@@ -908,6 +980,8 @@
           %+  turn  ordered
           |=  [bid=book-id:boox bk=book:boox]
           =/  pos=(unit position:boox)  (~(get by positions) bid)
+          =/  note-count=@ud
+            ~(wyt by (~(gut by notations) bid *(map @uv notation:boox)))
           %-  pairs:enjs:format
           :~  ['id' s+(scot %uv bid)]
               ['title' s+title.bk]
@@ -927,6 +1001,7 @@
                   ['progress' (numb:enjs:format progress.u.pos)]
                   ['updated-at' (sect:enjs:format updated-at.u.pos)]
               ==
+              ['notation-count' (numb:enjs:format note-count)]
           ==
       ==
     ::
@@ -936,6 +1011,8 @@
       =/  bk=(unit book:boox)  (~(get by books) u.bid)
       ?~  bk  not-found:gen:server
       =/  pos=(unit position:boox)  (~(get by positions) u.bid)
+      =/  notes=(map @uv notation:boox)
+        (~(gut by notations) u.bid *(map @uv notation:boox))
       %-  json-response:gen:server
       %-  pairs:enjs:format
       :~  ['id' s+(scot %uv u.bid)]
@@ -955,6 +1032,17 @@
           :~  ['value' s+value.u.pos]
               ['progress' (numb:enjs:format progress.u.pos)]
               ['updated-at' (sect:enjs:format updated-at.u.pos)]
+          ==
+          :-  'notations'
+          :-  %a
+          %+  turn  ~(tap by notes)
+          |=  [nid=@uv n=notation:boox]
+          %-  pairs:enjs:format
+          :~  ['id' s+(scot %uv nid)]
+              ['anchor' s+anchor.n]
+              ['selected' s+selected.n]
+              ['note' s+note.n]
+              ['created-at' (sect:enjs:format created-at.n)]
           ==
       ==
     ::
@@ -1215,6 +1303,16 @@
         ::
             %'toggle-readable'
           [%toggle-readable ((ot ~[name+so]) jon)]
+        ::
+            %'add-notation'
+          =/  f  (ot ~[book-id+(se %uv) nid+(se %uv) anchor+so selected+so note+so])
+          =/  [bid=@uv nid=@uv anchor=@t selected=@t note=@t]  (f jon)
+          [%add-notation bid nid [anchor selected note *@da]]
+        ::
+            %'remove-notation'
+          =/  f  (ot ~[book-id+(se %uv) nid+(se %uv)])
+          =/  [bid=@uv nid=@uv]  (f jon)
+          [%remove-notation bid nid]
         ::
             %'toggle-opds'
           [%toggle-opds ~]

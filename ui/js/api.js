@@ -143,6 +143,23 @@ window.BooxAPI = {
     return this.poke({ action: 'set-opds-password', password });
   },
 
+  // Notations
+  addNotation(bookId, nid, anchor, selected, note) {
+    return this.poke({
+      action: 'add-notation',
+      'book-id': bookId,
+      nid, anchor, selected, note
+    });
+  },
+
+  removeNotation(bookId, nid) {
+    return this.poke({
+      action: 'remove-notation',
+      'book-id': bookId,
+      nid
+    });
+  },
+
   // Dismiss (reject) a pending book
   dismissPending(pid) {
     return this.poke({ action: 'dismiss-pending', pid });

@@ -47,6 +47,16 @@ window.App = {
     window.addEventListener('popstate', () => {
       if (this.state.view === 'reader') this.showLibrary();
     });
+    // Deep link: open book from URL hash (#read=<bookId>)
+    this.checkHashOpen();
+  },
+
+  checkHashOpen() {
+    const hash = location.hash.slice(1);
+    if (!hash) return;
+    const params = new URLSearchParams(hash);
+    const bookId = params.get('read');
+    if (bookId) this.openBook(bookId);
   },
 
   // -- Theme --
@@ -160,6 +170,11 @@ window.App = {
             <div class="reader-toolbar-right">
               <button class="btn btn-ghost btn-sm" onclick="App.readerPrev()" title="Previous">\u2190</button>
               <button class="btn btn-ghost btn-sm" onclick="App.readerNext()" title="Next">\u2192</button>
+              <button class="btn btn-ghost btn-sm" id="zoom-in-btn" onclick="App.readerZoomIn()" title="Zoom in" style="display:none">+</button>
+              <button class="btn btn-ghost btn-sm" id="zoom-out-btn" onclick="App.readerZoomOut()" title="Zoom out" style="display:none">\u2212</button>
+              <button class="btn btn-ghost btn-sm" id="zoom-fit-btn" onclick="App.readerZoomFit()" title="Fit width" style="display:none">\u{1F5D6}</button>
+              <button class="btn btn-ghost btn-sm" onclick="Reader.toggleNotationList()" title="Notations">\u{1F4DD}</button>
+              <button class="btn btn-ghost btn-sm" onclick="Reader.toggleNotations()" id="notations-toggle-btn" title="Toggle highlights">\u{1F58D}</button>
               <button class="btn btn-ghost btn-sm" onclick="Reader.toggleSettingsPanel()" title="Font settings">Aa</button>
             </div>
           </div>
@@ -169,16 +184,16 @@ window.App = {
 
       <nav class="floating-nav" id="floating-nav">
         <button class="nav-item active" onclick="App.showLibrary()" data-view="library">
-          <span class="nav-icon">\u{1F4DA}</span> Library
+          <span class="nav-icon">\u{1F4DA}</span><span class="nav-label">Library</span>
         </button>
         <button class="nav-item" onclick="App.showCollections()" data-view="collections">
-          <span class="nav-icon">\u{1F517}</span> Collections
+          <span class="nav-icon">\u{1F517}</span><span class="nav-label">Collections</span>
         </button>
         <button class="nav-item" onclick="App.showUpload()" data-view="upload">
-          <span class="nav-icon">\u2191</span> Upload
+          <span class="nav-icon">\u2191</span><span class="nav-label">Upload</span>
         </button>
         <button class="nav-item" onclick="App.showSettings()" data-view="settings">
-          <span class="nav-icon">\u2699</span> Settings
+          <span class="nav-icon">\u2699</span><span class="nav-label">Settings</span>
         </button>
       </nav>
     `;
@@ -487,6 +502,7 @@ window.App = {
   showLibrary() {
     this.state.view = 'library';
     Reader.close();
+    history.replaceState(null, '', location.pathname);
     this.showDashboard();
     this.hideAllViews();
     document.getElementById('library-view').classList.remove('hidden');
@@ -497,12 +513,21 @@ window.App = {
   // -- Reader --
 
   async openBook(bookId) {
-    const book = this.state.books.find(b => b.id === bookId);
+    let book = this.state.books.find(b => b.id === bookId);
     if (!book) return;
+
+    // Fetch full book detail (includes notations)
+    try {
+      const detail = await BooxAPI.getBook(bookId);
+      book = { ...book, notations: detail.notations || [] };
+    } catch (e) {}
 
     this.state.currentBook = book;
     this.state.view = 'reader';
     history.pushState({ view: 'reader' }, '');
+
+    // Set URL hash for deep linking
+    location.hash = 'read=' + bookId;
 
     this.hideDashboard();
     this.hideAllViews();
@@ -514,6 +539,12 @@ window.App = {
 
     try {
       this.state.readerControls = await Reader.open(book);
+      // Show zoom buttons for PDF
+      const isPdf = book.format === 'pdf';
+      ['zoom-in-btn', 'zoom-out-btn', 'zoom-fit-btn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isPdf ? '' : 'none';
+      });
     } catch (e) {
       console.error('Failed to open book:', e);
       document.getElementById('reader-container').innerHTML =
@@ -533,6 +564,15 @@ window.App = {
   },
   readerNext() {
     if (this.state.readerControls?.next) this.state.readerControls.next();
+  },
+  readerZoomIn() {
+    if (this.state.readerControls?.zoomIn) this.state.readerControls.zoomIn();
+  },
+  readerZoomOut() {
+    if (this.state.readerControls?.zoomOut) this.state.readerControls.zoomOut();
+  },
+  readerZoomFit() {
+    if (this.state.readerControls?.zoomFit) this.state.readerControls.zoomFit();
   },
 
   // -- Upload --
@@ -1196,6 +1236,15 @@ window.App = {
     }
   },
 
+  _bookKey(title, author) {
+    return (title || '').toLowerCase().trim() + '|' + (author || '').toLowerCase().trim();
+  },
+
+  _findLocalMatch(remoteBook) {
+    const rk = this._bookKey(remoteBook.title, remoteBook.author);
+    return this.state.books.find(b => this._bookKey(b.title, b.author) === rk);
+  },
+
   renderFriendResults(ship, data) {
     const results = document.getElementById('friend-results');
     if (!results) return;
@@ -1205,6 +1254,23 @@ window.App = {
       results.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem">No shared collections found on ' + this.escapeHtml(ship) + '.</div>';
       return;
     }
+
+    // Cache friend notations for openBookWithFriendNotes
+    this._friendNotesCache = {};
+    for (const c of collections) {
+      for (const b of (c.books || [])) {
+        if (b.notations && b.notations.length > 0) {
+          const local = this._findLocalMatch(b);
+          if (local) {
+            if (!this._friendNotesCache[local.id]) this._friendNotesCache[local.id] = [];
+            for (const n of b.notations) {
+              this._friendNotesCache[local.id].push({ ...n, from: ship });
+            }
+          }
+        }
+      }
+    }
+
     results.innerHTML = `
       <div class="section-label">${this.escapeHtml(ship)} \u2014 ${collections.length} shared collection${collections.length !== 1 ? 's' : ''}</div>
       <div class="coll-list">
@@ -1217,7 +1283,11 @@ window.App = {
           </div>
           ${(c.books || []).length > 0 ? `
             <div class="coll-book-list" style="margin-left:1rem;margin-bottom:1rem">
-              ${c.books.map(b => `
+              ${c.books.map(b => {
+                const local = this._findLocalMatch(b);
+                const noteCount = (b.notations || []).length;
+                const hasMatch = local && noteCount > 0;
+                return `
                 <div class="coll-book-item">
                   <div class="coll-book-cover" ${b['cover-url'] ? `style="background-image:url('${this.escapeHtml(b['cover-url'])}')"` : ''}>
                     ${!b['cover-url'] ? `<span style="font-size:0.5rem;color:var(--text-muted)">${this.escapeHtml(b.format || '').toUpperCase()}</span>` : ''}
@@ -1226,13 +1296,57 @@ window.App = {
                     <div class="coll-book-title">${this.escapeHtml(b.title)}</div>
                     <div class="coll-book-author">${this.escapeHtml(b.author || 'Unknown')}</div>
                   </div>
-                </div>
-              `).join('')}
+                  ${hasMatch ? `<button class="btn btn-sm" onclick="App.openBookWithFriendNotes('${local.id}', '${this.escapeHtml(ship)}')" title="You have this book — view their notes">\u{1F4DD} ${noteCount}</button>` : ''}
+                  ${local && !hasMatch ? `<span style="font-size:0.65rem;color:var(--text-muted)">In library</span>` : ''}
+                </div>`;
+              }).join('')}
             </div>
           ` : ''}
         `).join('')}
       </div>
     `;
+  },
+
+  async openBookWithFriendNotes(bookId, ship) {
+    let book = this.state.books.find(b => b.id === bookId);
+    if (!book) return;
+
+    // Fetch own notations
+    try {
+      const detail = await BooxAPI.getBook(bookId);
+      book = { ...book, notations: detail.notations || [] };
+    } catch (e) {
+      book = { ...book, notations: [] };
+    }
+
+    // Merge friend notations
+    const friendNotes = (this._friendNotesCache || {})[bookId] || [];
+    book.notations = [...book.notations, ...friendNotes];
+
+    this.state.currentBook = book;
+    this.state.view = 'reader';
+    history.pushState({ view: 'reader' }, '');
+    location.hash = 'read=' + bookId;
+
+    this.hideDashboard();
+    this.hideAllViews();
+    document.getElementById('reader-view').classList.remove('hidden');
+    document.getElementById('reader-title').textContent = book.title + ' (+ ' + ship + ' notes)';
+
+    this.updateProgressMeter(book.position ? book.position.progress : 0);
+
+    try {
+      this.state.readerControls = await Reader.open(book);
+      const isPdf = book.format === 'pdf';
+      ['zoom-in-btn', 'zoom-out-btn', 'zoom-fit-btn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isPdf ? '' : 'none';
+      });
+    } catch (e) {
+      console.error('Failed to open book:', e);
+      document.getElementById('reader-container').innerHTML =
+        `<div class="reader-error">Failed to open: ${e.message}</div>`;
+    }
   },
 
   // -- Pending Imports --

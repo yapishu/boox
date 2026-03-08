@@ -6,6 +6,8 @@ window.Reader = {
   rendition: null,
   positionSaveTimer: null,
   fontSettings: null,
+  notationsVisible: JSON.parse(localStorage.getItem('boox-notations-visible') || 'true'),
+  _notations: [],
 
   loadFontSettings() {
     const defaults = { fontFamily: "'IBM Plex Serif', Georgia, serif", fontSize: 100, lineHeight: 1.6 };
@@ -24,6 +26,7 @@ window.Reader = {
     this.currentBook = book;
     this.container = document.getElementById('reader-container');
     this.container.innerHTML = '';
+    this._notations = book.notations || [];
 
     const format = book.format;
     switch (format) {
@@ -49,12 +52,20 @@ window.Reader = {
     }
     this.currentBook = null;
     this._epubBook = null;
+    this._notations = [];
+    this._dismissPopups();
     const existing = document.getElementById('reader-font-settings');
     if (existing) existing.remove();
     const chList = document.getElementById('reader-chapter-list');
     if (chList) chList.remove();
+    const nList = document.getElementById('reader-notation-list');
+    if (nList) nList.remove();
     const container = document.getElementById('reader-container');
     if (container) container.innerHTML = '';
+  },
+
+  _dismissPopups() {
+    document.querySelectorAll('.notation-popup, .notation-detail').forEach(el => el.remove());
   },
 
   getThemeColors() {
@@ -86,7 +97,12 @@ window.Reader = {
       },
       'a': { 'color': `${c.link} !important` },
       'p': { 'margin-bottom': '0.8em !important' },
-      'h1,h2,h3,h4,h5,h6': { 'color': `${c.fg} !important` }
+      'h1,h2,h3,h4,h5,h6': { 'color': `${c.fg} !important` },
+      '.boox-highlight': {
+        'background': 'rgba(251,191,36,0.3) !important',
+        'cursor': 'pointer !important',
+        'border-radius': '2px !important',
+      }
     });
   },
 
@@ -206,6 +222,179 @@ window.Reader = {
     if (panel) panel.remove();
   },
 
+  // -- Notations --
+
+  toggleNotations() {
+    this.notationsVisible = !this.notationsVisible;
+    localStorage.setItem('boox-notations-visible', JSON.stringify(this.notationsVisible));
+    if (this.rendition) {
+      if (this.notationsVisible) {
+        this._applyNotationHighlights();
+      } else {
+        this._clearNotationHighlights();
+      }
+    }
+  },
+
+  toggleNotationList() {
+    const existing = document.getElementById('reader-notation-list');
+    if (existing) { existing.remove(); return; }
+
+    const panel = document.createElement('div');
+    panel.id = 'reader-notation-list';
+    panel.className = 'notation-sidebar';
+
+    if (this._notations.length === 0) {
+      panel.innerHTML = '<div class="notation-sidebar-empty">No notations yet. Select text in an EPUB to add one.</div>';
+    } else {
+      panel.innerHTML = this._notations.map(n => `
+        <div class="notation-sidebar-item" onclick="Reader.goToNotation('${this.escapeHtml(n.anchor)}')">
+          <div class="notation-sidebar-quote">"${this.escapeHtml((n.selected || '').slice(0, 80))}"</div>
+          ${n.note ? `<div class="notation-sidebar-note">${this.escapeHtml(n.note)}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('reader-toolbar').appendChild(panel);
+  },
+
+  goToNotation(anchor) {
+    if (this.rendition && anchor) {
+      this.rendition.display(anchor);
+    }
+    const panel = document.getElementById('reader-notation-list');
+    if (panel) panel.remove();
+  },
+
+  _generateNid() {
+    const uvChars = '0123456789abcdefghijklmnopqrstuv';
+    const bytes = crypto.getRandomValues(new Uint8Array(20));
+    let raw = '';
+    for (const b of bytes) raw += uvChars[b & 31];
+    const groups = raw.match(/.{1,5}/g);
+    groups[0] = groups[0].replace(/^0+/, '') || '0';
+    return '0v' + groups.join('.');
+  },
+
+  _applyNotationHighlights() {
+    if (!this.rendition || !this.notationsVisible) return;
+    for (const n of this._notations) {
+      try {
+        this.rendition.annotations.highlight(
+          n.anchor, { id: n.id },
+          (e) => { this._showNotationDetail(n, e); },
+          'boox-highlight'
+        );
+      } catch (e) {}
+    }
+  },
+
+  _clearNotationHighlights() {
+    if (!this.rendition) return;
+    for (const n of this._notations) {
+      try { this.rendition.annotations.remove(n.anchor, 'highlight'); } catch (e) {}
+    }
+  },
+
+  _showNotationPopup(cfiRange, text) {
+    this._dismissPopups();
+    const popup = document.createElement('div');
+    popup.className = 'notation-popup';
+    popup.style.top = '50%';
+    popup.style.left = '50%';
+    popup.style.transform = 'translate(-50%, -50%)';
+    popup.innerHTML = `
+      <div class="notation-popup-quote">"${this.escapeHtml(text.slice(0, 200))}"</div>
+      <textarea id="notation-note-input" rows="3" placeholder="Add a note (optional)..."></textarea>
+      <div class="notation-popup-actions">
+        <button class="btn btn-sm" onclick="Reader._dismissPopups()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="Reader._saveNotation()">Save</button>
+      </div>
+    `;
+    this._pendingNotation = { cfiRange, text };
+    document.body.appendChild(popup);
+    popup.querySelector('textarea').focus();
+  },
+
+  async _saveNotation() {
+    const pn = this._pendingNotation;
+    if (!pn || !this.currentBook) return;
+    const noteInput = document.getElementById('notation-note-input');
+    const note = noteInput ? noteInput.value.trim() : '';
+    const nid = this._generateNid();
+
+    const notation = {
+      id: nid,
+      anchor: pn.cfiRange,
+      selected: pn.text,
+      note,
+    };
+
+    this._notations.push(notation);
+    this._dismissPopups();
+    this._pendingNotation = null;
+
+    // Apply highlight
+    if (this.rendition && this.notationsVisible) {
+      try {
+        this.rendition.annotations.highlight(
+          notation.anchor, { id: nid },
+          (e) => { this._showNotationDetail(notation, e); },
+          'boox-highlight'
+        );
+      } catch (e) {}
+    }
+
+    // Save to backend
+    try {
+      await BooxAPI.addNotation(this.currentBook.id, nid, pn.cfiRange, pn.text, note);
+    } catch (e) {
+      console.error('Failed to save notation:', e);
+    }
+  },
+
+  _showNotationDetail(notation, event) {
+    this._dismissPopups();
+    const detail = document.createElement('div');
+    detail.className = 'notation-detail';
+    detail.style.top = '50%';
+    detail.style.left = '50%';
+    detail.style.transform = 'translate(-50%, -50%)';
+
+    const isOwn = !!this.currentBook;
+    detail.innerHTML = `
+      <div class="notation-detail-quote">"${this.escapeHtml((notation.selected || '').slice(0, 300))}"</div>
+      ${notation.note ? `<div class="notation-detail-note">${this.escapeHtml(notation.note)}</div>` : ''}
+      ${notation.from ? `<div class="notation-detail-meta">From ${this.escapeHtml(notation.from)}</div>` : ''}
+      <div class="notation-popup-actions" style="margin-top:0.5rem">
+        <button class="btn btn-sm" onclick="Reader._dismissPopups()">Close</button>
+        ${isOwn ? `<button class="btn btn-sm" style="color:var(--danger)" onclick="Reader._deleteNotation('${this.escapeHtml(notation.id)}')">Delete</button>` : ''}
+      </div>
+    `;
+    document.body.appendChild(detail);
+  },
+
+  async _deleteNotation(nid) {
+    if (!this.currentBook) return;
+    const idx = this._notations.findIndex(n => n.id === nid);
+    if (idx === -1) return;
+    const notation = this._notations[idx];
+
+    // Remove highlight
+    if (this.rendition) {
+      try { this.rendition.annotations.remove(notation.anchor, 'highlight'); } catch (e) {}
+    }
+
+    this._notations.splice(idx, 1);
+    this._dismissPopups();
+
+    try {
+      await BooxAPI.removeNotation(this.currentBook.id, nid);
+    } catch (e) {
+      console.error('Failed to delete notation:', e);
+    }
+  },
+
   // EPUB - using epub.js
   async openEpub(book) {
     this.fontSettings = this.loadFontSettings();
@@ -228,6 +417,11 @@ window.Reader = {
 
     this.applyTheme();
 
+    // Apply notation highlights after rendering
+    this.rendition.on('started', () => {
+      this._applyNotationHighlights();
+    });
+
     // Track position & update progress meter
     let locationsReady = false;
     this.rendition.on('relocated', (location) => {
@@ -249,6 +443,16 @@ window.Reader = {
       epubBook.locations.generate(1600).then(() => { locationsReady = true; })
     );
 
+    // Text selection for notations
+    this.rendition.on('selected', (cfiRange, contents) => {
+      if (!this.notationsVisible) return;
+      const range = this.rendition.getRange(cfiRange);
+      if (!range) return;
+      const text = range.toString().trim();
+      if (text.length < 3) return;
+      this._showNotationPopup(cfiRange, text);
+    });
+
     // Keyboard nav
     this.rendition.on('keyup', (e) => {
       if (e.key === 'ArrowRight' || e.key === ' ') this.rendition.next();
@@ -257,8 +461,7 @@ window.Reader = {
 
     // Tap zones: left 25% = prev, right 25% = next
     this.container.addEventListener('click', (e) => {
-      // Ignore if clicking inside the settings/chapter panels
-      if (e.target.closest('.font-settings-panel, .chapter-list-panel')) return;
+      if (e.target.closest('.font-settings-panel, .chapter-list-panel, .notation-popup, .notation-detail, .notation-sidebar')) return;
       const rect = this.container.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const w = rect.width;
@@ -269,8 +472,9 @@ window.Reader = {
     return { prev: () => this.rendition.prev(), next: () => this.rendition.next() };
   },
 
-  // PDF - using pdf.js
+  // PDF - using pdf.js (with zoom controls)
   async openPdf(book) {
+    let pdfScale = parseFloat(localStorage.getItem('boox-pdf-scale') || '0');
     const wrapper = document.createElement('div');
     wrapper.className = 'pdf-viewer';
     this.container.appendChild(wrapper);
@@ -291,11 +495,11 @@ window.Reader = {
 
     const renderPage = async (num) => {
       const page = await pdf.getPage(num);
-      const containerWidth = wrapper.clientWidth;
       const unscaledViewport = page.getViewport({ scale: 1 });
-      const scale = containerWidth / unscaledViewport.width;
-      const viewport = page.getViewport({ scale });
+      const fitScale = (wrapper.clientWidth || window.innerWidth - 32) / unscaledViewport.width;
+      const scale = pdfScale > 0 ? pdfScale : fitScale;
 
+      const viewport = page.getViewport({ scale });
       canvas.height = viewport.height;
       canvas.width = viewport.width;
 
@@ -308,10 +512,39 @@ window.Reader = {
 
     await renderPage(currentPage);
 
+    const zoomIn = () => {
+      const page_promise = pdf.getPage(currentPage);
+      page_promise.then(page => {
+        const uv = page.getViewport({ scale: 1 });
+        const fitScale = (wrapper.clientWidth || window.innerWidth - 32) / uv.width;
+        const cur = pdfScale > 0 ? pdfScale : fitScale;
+        pdfScale = Math.min(cur * 1.25, 5);
+        localStorage.setItem('boox-pdf-scale', String(pdfScale));
+        renderPage(currentPage);
+      });
+    };
+    const zoomOut = () => {
+      const page_promise = pdf.getPage(currentPage);
+      page_promise.then(page => {
+        const uv = page.getViewport({ scale: 1 });
+        const fitScale = (wrapper.clientWidth || window.innerWidth - 32) / uv.width;
+        const cur = pdfScale > 0 ? pdfScale : fitScale;
+        pdfScale = Math.max(cur * 0.8, 0.25);
+        localStorage.setItem('boox-pdf-scale', String(pdfScale));
+        renderPage(currentPage);
+      });
+    };
+    const zoomFit = () => {
+      pdfScale = 0;
+      localStorage.setItem('boox-pdf-scale', '0');
+      renderPage(currentPage);
+    };
+
     return {
       prev: () => { if (currentPage > 1) renderPage(currentPage - 1); },
       next: () => { if (currentPage < totalPages) renderPage(currentPage + 1); },
       goTo: (n) => { if (n >= 1 && n <= totalPages) renderPage(n); },
+      zoomIn, zoomOut, zoomFit,
       totalPages
     };
   },
@@ -326,13 +559,11 @@ window.Reader = {
     pre.textContent = text;
     this.container.appendChild(pre);
 
-    // Restore scroll position
     const pos = book.position;
     if (pos && pos.value) {
       this.container.scrollTop = parseInt(pos.value) || 0;
     }
 
-    // Track scroll position
     let scrollTimer;
     this.container.addEventListener('scroll', () => {
       clearTimeout(scrollTimer);
@@ -354,7 +585,6 @@ window.Reader = {
 
     const div = document.createElement('div');
     div.className = 'md-reader';
-    // Simple markdown rendering
     div.innerHTML = this.renderMarkdown(text);
     this.container.appendChild(div);
 
@@ -390,7 +620,6 @@ window.Reader = {
     frame.srcdoc = html;
 
     frame.onload = () => {
-      // Inject dark theme
       const c = this.getThemeColors();
       const style = frame.contentDocument.createElement('style');
       style.textContent = `
@@ -402,7 +631,6 @@ window.Reader = {
       `;
       frame.contentDocument.head.appendChild(style);
 
-      // Restore position
       const pos = book.position;
       if (pos && pos.value) {
         frame.contentWindow.scrollTo(0, parseInt(pos.value) || 0);
@@ -412,7 +640,7 @@ window.Reader = {
     return {};
   },
 
-  // MOBI - extract and render as HTML (basic extraction)
+  // MOBI
   async openMobi(book) {
     const div = document.createElement('div');
     div.className = 'mobi-reader';
@@ -422,15 +650,12 @@ window.Reader = {
     try {
       const res = await fetch(book['s3-url']);
       const buffer = await res.arrayBuffer();
-      // Use mobi.js if available, otherwise show raw text extraction
       if (window.MOBI) {
         const mobiBook = await MOBI.parse(buffer);
         div.innerHTML = mobiBook.html || mobiBook.text || '<p>Could not parse MOBI file</p>';
       } else {
-        // Fallback: try to extract text content
         const bytes = new Uint8Array(buffer);
         const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-        // Strip binary content, keep readable text
         const cleaned = text.replace(/[\x00-\x08\x0e-\x1f]/g, '')
                            .replace(/<[^>]*>/g, '\n')
                            .replace(/\n{3,}/g, '\n\n');
@@ -443,25 +668,18 @@ window.Reader = {
     return {};
   },
 
-  // Simple markdown to HTML
   renderMarkdown(md) {
     let html = this.escapeHtml(md);
-    // Headers
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    // Bold/italic
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/`(.+?)`/g, '<code>$1</code>');
-    // Links
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-    // Line breaks and paragraphs
     html = html.replace(/\n\n/g, '</p><p>');
     html = html.replace(/\n/g, '<br>');
-    // Lists
     html = html.replace(/^- (.+)/gm, '<li>$1</li>');
-    // Code blocks
     html = html.replace(/```[\s\S]*?```/g, (m) => {
       return '<pre><code>' + m.slice(3, -3) + '</code></pre>';
     });
@@ -469,6 +687,7 @@ window.Reader = {
   },
 
   escapeHtml(str) {
+    if (!str) return '';
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
@@ -476,7 +695,6 @@ window.Reader = {
 
   savePosition(value, progress) {
     if (!this.currentBook) return;
-    // Debounced save to avoid spamming the agent
     clearTimeout(this._saveTimer);
     this._saveTimer = setTimeout(() => {
       BooxAPI.setPosition(this.currentBook.id, value, progress).catch(() => {});

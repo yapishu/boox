@@ -54,6 +54,15 @@
       received-at=@da
   ==
 ::
+::  annotation/highlight on a book passage
+::
++$  notation
+  $:  anchor=@t
+      selected=@t
+      note=@t
+      created-at=@da
+  ==
+::
 ::  agent states
 ::
 +$  state-0
@@ -114,6 +123,19 @@
       readable-colls=(set @t)
   ==
 ::
++$  state-6
+  $:  %6
+      books=(map book-id book)
+      positions=(map book-id position)
+      book-order=(list book-id)
+      collections=(map @t collection)
+      pending=(map @uv pending-book)
+      opds-enabled=?
+      opds-password=@t
+      readable-colls=(set @t)
+      notations=(map book-id (map @uv notation))
+  ==
+::
 +$  versioned-state
   $%  state-0
       state-1
@@ -121,6 +143,7 @@
       state-3
       state-4
       state-5
+      state-6
   ==
 ::
 ::  poke actions
@@ -142,6 +165,9 @@
       [%publish-collection name=@t]
       [%unpublish-collection name=@t]
       [%toggle-readable name=@t]
+      ::  notations
+      [%add-notation =book-id nid=@uv =notation]
+      [%remove-notation =book-id nid=@uv]
       ::  settings
       [%toggle-opds ~]
       [%set-opds-password password=@t]

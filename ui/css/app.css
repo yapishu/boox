@@ -1317,8 +1317,12 @@ body {
   .now-reading-card { width: 240px; }
   .floating-nav { bottom: 0.75rem; }
   .nav-item { padding: 0.4rem 0.75rem; font-size: 0.75rem; }
+  .nav-label { display: none; }
   .reader-toolbar { padding: 0.4rem 0.5rem; }
+  .reader-toolbar-left { gap: 0.25rem; }
+  .reader-toolbar-right { gap: 0.15rem; }
   #reader-title { max-width: 120px; font-size: 0.75rem; }
+  .progress-meter { min-width: 80px; }
   .upload-panel { padding: 1rem 0; }
 }
 
@@ -1332,6 +1336,119 @@ body {
 
 @media (min-width: 1024px) {
   .book-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 200px)); }
+}
+
+/* ── Notation popup ── */
+.notation-popup {
+  position: fixed;
+  z-index: 800;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem;
+  width: 280px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.notation-popup textarea {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  resize: vertical;
+  outline: none;
+  margin-bottom: 0.5rem;
+}
+.notation-popup textarea:focus { border-color: var(--text-muted); }
+.notation-popup-quote {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 0.5rem;
+  max-height: 3rem;
+  overflow: hidden;
+  line-height: 1.4;
+  border-left: 2px solid var(--border);
+  padding-left: 0.5rem;
+}
+.notation-popup-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+.notation-detail {
+  position: fixed;
+  z-index: 800;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem;
+  width: 280px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.notation-detail-quote {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 0.4rem;
+  line-height: 1.4;
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
+}
+.notation-detail-note {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+.notation-detail-meta {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.notation-sidebar {
+  position: absolute;
+  right: 0.5rem;
+  top: calc(100% + 0.25rem);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.4rem;
+  min-width: 260px;
+  max-width: 350px;
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 700;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+.notation-sidebar-item {
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition);
+  margin-bottom: 0.15rem;
+}
+.notation-sidebar-item:hover { background: var(--bg-hover); }
+.notation-sidebar-quote {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notation-sidebar-note {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 0.15rem;
+}
+.notation-sidebar-empty {
+  padding: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 /* ── Toast notifications ── */
