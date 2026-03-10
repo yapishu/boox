@@ -59,7 +59,8 @@ window.S3Upload = {
           } else {
             url = `${endpoint}/${config.bucket}/${key}`;
           }
-          resolve({ url, key });
+          const etag = (xhr.getResponseHeader('ETag') || '').replace(/"/g, '');
+          resolve({ url, key, etag });
         } else {
           reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
         }

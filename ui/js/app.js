@@ -49,8 +49,15 @@ window.App = {
     window.addEventListener('popstate', () => {
       if (this.state.view === 'reader') this.showLibrary();
     });
+    // Load annas domain for links
+    try {
+      const settings = await BooxAPI.getSettings();
+      this._annasDomain = settings['annas-domain'] || 'annas-archive.gl';
+    } catch (e) {}
     // Deep link: open book from URL hash (#read=<bookId>)
     this.checkHashOpen();
+    // Backfill content hashes for existing books (once)
+    this.backfillHashes();
   },
 
   checkHashOpen() {
@@ -93,6 +100,31 @@ window.App = {
     } catch (e) {
       console.error('Failed to load books:', e);
     }
+  },
+
+  async backfillHashes() {
+    if (localStorage.getItem('boox-hashes-backfilled')) return;
+    const needHash = this.state.books.filter(b => b['s3-url'] && !b['content-hash']);
+    if (needHash.length === 0) {
+      localStorage.setItem('boox-hashes-backfilled', '1');
+      return;
+    }
+    console.log(`Backfilling content hashes for ${needHash.length} books...`);
+    let filled = 0;
+    for (const book of needHash) {
+      try {
+        const resp = await fetch(book['s3-url'], { method: 'HEAD' });
+        if (!resp.ok) continue;
+        const etag = (resp.headers.get('ETag') || '').replace(/"/g, '');
+        if (etag) {
+          await BooxAPI.setBookHash(book.id, etag);
+          filled++;
+        }
+      } catch (e) { /* skip */ }
+    }
+    if (filled > 0) await this.loadBooks();
+    localStorage.setItem('boox-hashes-backfilled', '1');
+    console.log(`Backfilled ${filled}/${needHash.length} content hashes`);
   },
 
   async loadS3Config() {
@@ -293,6 +325,8 @@ window.App = {
       books.sort((a, b) => a.title.localeCompare(b.title));
     } else if (this.state.sortBy === 'author') {
       books.sort((a, b) => (a.author || '').localeCompare(b.author || ''));
+    } else if (this.state.sortBy === 'recent') {
+      books.reverse();
     }
 
     return books;
@@ -440,11 +474,22 @@ window.App = {
     document.querySelectorAll('.context-menu').forEach(m => m.remove());
     const menu = document.createElement('div');
     menu.className = 'context-menu';
+    const book = this.state.books.find(b => b.id === bookId);
+    const hash = book?.['content-hash'] || '';
+    const dom = this._annasDomain || 'annas-archive.gl';
+    const annasLink = hash
+      ? `https://${dom}/md5/${hash}`
+      : (book ? `https://${dom}/search?q=${encodeURIComponent(book.title)}` : '');
+    const annasAuthorLink = book?.author
+      ? `https://${dom}/search?q=${encodeURIComponent(book.author)}`
+      : '';
     menu.innerHTML = `
       <button onclick="App.editBook('${bookId}')">Edit metadata</button>
       <button onclick="App.showAddToCollection('${bookId}')">Add to collection</button>
       <button onclick="App.showSendToFriend('${bookId}')">Send to pal</button>
       <button onclick="App.scrobbleToLast('${bookId}')">Scrobble to %last</button>
+      ${annasLink ? `<button onclick="window.open('${annasLink}', '_blank')">Anna's${hash ? '' : ' (search)'}</button>` : ''}
+      ${annasAuthorLink ? `<button onclick="window.open('${annasAuthorLink}', '_blank')">Author on Anna's</button>` : ''}
       <button onclick="App.confirmDeleteBook('${bookId}')" style="color:var(--danger)">Delete</button>
     `;
     menu.style.left = event.clientX + 'px';
@@ -850,6 +895,11 @@ window.App = {
         'file-size': file.size,
         tags, description
       });
+
+      // Store content hash from S3 ETag
+      if (result.etag) {
+        try { await BooxAPI.setBookHash(bookId, result.etag); } catch (e) { console.warn('hash:', e); }
+      }
 
       // Add to selected collections
       const selectedColls = [...document.querySelectorAll('.upload-coll-check:checked')]
@@ -1533,6 +1583,11 @@ window.App = {
         description: book.description || ''
       });
 
+      // Store content hash from re-upload ETag
+      if (result.etag) {
+        try { await BooxAPI.setBookHash(bookId, result.etag); } catch (e) { console.warn('hash:', e); }
+      }
+
       // Dismiss the pending entry
       await BooxAPI.dismissPending(pid);
 
@@ -1610,6 +1665,12 @@ window.App = {
         tags: book.tags || [],
         description: book.description || ''
       });
+
+      // Preserve content hash: prefer source book's hash, fallback to new ETag
+      const hash = book['content-hash'] || result.etag || '';
+      if (hash) {
+        try { await BooxAPI.setBookHash(bookId, hash); } catch (e) { console.warn('hash:', e); }
+      }
 
       await this.loadBooks();
       btnEl.textContent = '\u2713 Grabbed';
@@ -1718,10 +1779,12 @@ window.App = {
     view.innerHTML = '<div class="loading-spinner">Loading feed...</div>';
 
     try {
-      const [feedData, peersData] = await Promise.all([
+      const [feedData, peersData, settings] = await Promise.all([
         BooxAPI.getLastFeed(),
         BooxAPI.getLastPeers(),
+        BooxAPI.getSettings().catch(() => ({})),
       ]);
+      this._annasDomain = settings['annas-domain'] || 'annas-archive.gl';
 
       // own scrobbles from boox
       const own = (feedData.scrobbles || [])
@@ -1749,6 +1812,9 @@ window.App = {
         return;
       }
 
+      // Store own ship for feed card logic
+      window._booxShip = feedData.ship || '';
+
       view.innerHTML = `
         <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem">
           <a href="/apps/last?tab=friends&source=boox" class="btn btn-sm" style="text-decoration:none">View in %last</a>
@@ -1757,6 +1823,7 @@ window.App = {
           ${all.map(sc => this.renderFeedCard(sc)).join('')}
         </div>
       `;
+
     } catch (e) {
       view.innerHTML = `
         <div class="empty-state">
@@ -1769,6 +1836,34 @@ window.App = {
 
   renderFeedCard(sc) {
     const time = this.timeAgo(sc.when * 1000);
+    const meta = sc.meta || {};
+    const hash = meta['content-hash'] || '';
+    const author = meta['author'] || '';
+    const isOwn = sc.ship === (window._booxShip || '');
+    const haveLocal = hash && this.state.books.some(b => b['content-hash'] === hash);
+    const s3Url = meta['s3-url'] || sc['s3-url'] || '';
+    const dom = this._annasDomain || 'annas-archive.gl';
+
+    // Anna's link: md5 if hash, search by title otherwise
+    const annasUrl = hash
+      ? `https://${dom}/md5/${hash}`
+      : `https://${dom}/search?q=${encodeURIComponent(sc.name)}`;
+    const annasHtml = `<a href="${annasUrl}" target="_blank" rel="noopener" class="feed-card-muted-link">Anna's</a>`;
+
+    const authorHtml = author
+      ? `<a href="https://${dom}/search?q=${encodeURIComponent(author)}" target="_blank" rel="noopener" class="feed-card-muted-link">${this.escapeHtml(author)}</a>`
+      : '';
+
+    // Author + Anna's on same row
+    const authorRow = (author || true)
+      ? `<div class="feed-card-sub">${authorHtml}${author ? ' · ' : ''}${annasHtml}</div>`
+      : '';
+
+    let downloadLink = '';
+    if (!isOwn && s3Url && !haveLocal) {
+      downloadLink = `<div class="feed-card-links"><a href="${this.escapeHtml(s3Url)}" class="feed-card-muted-link" target="_blank" download>Download</a></div>`;
+    }
+
     return `
       <div class="feed-card">
         ${sc.image ? `<div class="feed-card-img"><img src="${this.escapeHtml(sc.image)}" alt="" loading="lazy" /></div>` : ''}
@@ -1779,6 +1874,8 @@ window.App = {
             <span class="feed-card-time">${time}</span>
           </div>
           <div class="feed-card-name">${this.escapeHtml(sc.name)}</div>
+          ${authorRow}
+          ${downloadLink}
         </div>
       </div>
     `;
@@ -1815,12 +1912,14 @@ window.App = {
     let opdsPassword = '';
     let lastScrobble = false;
     let lastScrobbleUpload = true;
+    let annasDomain = 'annas-archive.gl';
     try {
       const settings = await BooxAPI.getSettings();
       opdsEnabled = settings['opds-enabled'] || false;
       opdsPassword = settings['opds-password'] || '';
       lastScrobble = settings['last-scrobble'] || false;
       lastScrobbleUpload = settings['last-scrobble-upload'] ?? true;
+      annasDomain = settings['annas-domain'] || 'annas-archive.gl';
     } catch (e) {}
 
     const opdsUrl = `${window.location.origin}/apps/boox/api/opds`;
@@ -1882,6 +1981,14 @@ window.App = {
           </label>
         </div>
         <div class="settings-section">
+          <h3>Anna's Archive</h3>
+          <p class="settings-hint">Domain used for book search/lookup links in the feed.</p>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <input type="text" id="annas-domain-input" value="${this.escapeHtml(annasDomain)}" placeholder="annas-archive.gl" class="public-link-input" style="flex:1">
+            <button class="btn btn-sm" onclick="App.saveAnnasDomain()">Save</button>
+          </div>
+        </div>
+        <div class="settings-section">
           <h3>Theme</h3>
           <p class="settings-hint">Current: ${this.state.theme === 'dark' ? 'Dark' : 'Light'}</p>
           <button class="btn" onclick="App.toggleTheme()">Toggle Theme</button>
@@ -1923,6 +2030,17 @@ window.App = {
       toast('Scrobbled to %last');
     } catch (e) {
       toast('Failed to scrobble: ' + e.message, 'error');
+    }
+  },
+
+  async saveAnnasDomain() {
+    const input = document.getElementById('annas-domain-input');
+    const domain = input ? input.value.trim() : 'annas-archive.gl';
+    try {
+      await BooxAPI.setAnnasDomain(domain || 'annas-archive.gl');
+      toast('Anna\'s Archive domain updated');
+    } catch (e) {
+      toast('Failed to save domain: ' + e.message, 'error');
     }
   },
 

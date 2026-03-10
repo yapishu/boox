@@ -1646,6 +1646,22 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.feed-card-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.feed-card-links {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+}
+.feed-card-muted-link {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.feed-card-muted-link:hover {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
 .empty-hint {
   font-size: 0.8rem;
   color: var(--text-muted);

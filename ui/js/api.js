@@ -201,6 +201,16 @@ window.BooxAPI = {
     return res.json();
   },
 
+  // Set content hash for a book
+  setBookHash(bookId, hash) {
+    return this.poke({ action: 'set-book-hash', 'book-id': bookId, hash });
+  },
+
+  // Set Anna's Archive domain
+  setAnnasDomain(domain) {
+    return this.poke({ action: 'set-annas-domain', domain });
+  },
+
   // Fetch a remote ship's public collection by token (cross-origin)
   async getRemotePublicCollection(shipUrl, token) {
     const url = shipUrl.replace(/\/$/, '') + '/apps/boox/api/public/' + encodeURIComponent(token);

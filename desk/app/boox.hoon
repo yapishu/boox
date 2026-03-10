@@ -186,7 +186,7 @@
 --
 ::
 %-  agent:dbug
-=|  state-8:boox
+=|  state-10:boox
 =*  state  -
 =/  remote-cache  *(map @p json)
 %+  verb  |
@@ -220,34 +220,40 @@
         [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
   ?-  -.old
-      %8  [cleanup this(state old)]
+      %10  [cleanup this(state old)]
+  ::
+      %9
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old book-hashes.old ~ 'annas-archive.gl'])]
+  ::
+      %8
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old ~ ~ 'annas-archive.gl'])]
   ::
       %7
-    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old %.y ~ ~ 'annas-archive.gl'])]
   ::
       %6
-    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old %.n %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %5
-    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old ~ %.n %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %4
-    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~ ~ %.n %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %3
-    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~ ~ %.n %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %2
-    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old %.n '' ~ ~ %.n %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %1
-    [cleanup this(state [%8 books.old positions.old book-order.old collections.old ~ %.n '' ~ ~ %.n %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old collections.old ~ %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    [cleanup this(state [%8 books.old positions.old book-order.old new-colls ~ %.n '' ~ ~ %.n %.y])]
+    [cleanup this(state [%10 books.old positions.old book-order.old new-colls ~ %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ==
 ::
 ++  on-init
@@ -314,10 +320,28 @@
       =.  last-scrobble-upload  !last-scrobble-upload
       `this
     ::
+        %set-annas-domain
+      =.  annas-domain  domain.act
+      `this
+    ::
+        %set-book-hash
+      ?>  =(src.bowl our.bowl)
+      =.  book-hashes  (~(put by book-hashes) book-id.act hash.act)
+      ?.  =('' hash.act)  :: fire iris check if hash is non-empty
+        =/  dom=@t  ?:(=('' annas-domain) 'annas-archive.gl' annas-domain)
+        =/  url=@t  (crip "https://{(trip dom)}/md5/{(trip hash.act)}")
+        =/  req=request:http  [%'GET' url ~ ~]
+        :_  this
+        ^-  (list card)
+        :~  [%pass /annas/(scot %uv book-id.act) %arvo %i %request req *outbound-config:iris]
+        ==
+      `this
+    ::
         %scrobble-to-last
       =/  bid  book-id.act
       =/  bk=(unit book:boox)  (~(get by books) bid)
       ?~  bk  `this
+      =/  bh=@t  (~(gut by book-hashes) bid '')
       =/  jon=json
         %-  pairs:enjs:format
         :~  ['action' s+'scrobble']
@@ -327,9 +351,13 @@
             ['source' s+'boox']
             :-  'meta'
             %-  pairs:enjs:format
-            :~  ['book-id' s+(scot %uv bid)]
-                ['author' s+author.u.bk]
-            ==
+            %+  weld
+              :~  ['book-id' s+(scot %uv bid)]
+                  ['author' s+author.u.bk]
+                  ['s3-url' s+s3-url.u.bk]
+              ==
+            ^-  (list [@t json])
+            ?:(=('' bh) ~ ~[['content-hash' s+bh]])
         ==
       :_  this
       :~  [%pass /last/scrobble %agent [our.bowl %last] %poke %json !>(jon)]
@@ -343,6 +371,7 @@
       =.  book-order  (snoc book-order bid)
       =/  upload-cards=(list card)
         ?.  last-scrobble-upload  ~
+        =/  bh=@t  (~(gut by book-hashes) bid '')
         =/  jon=json
           %-  pairs:enjs:format
           :~  ['action' s+'scrobble']
@@ -352,9 +381,13 @@
               ['source' s+'boox']
               :-  'meta'
               %-  pairs:enjs:format
-              :~  ['book-id' s+(scot %uv bid)]
-                  ['author' s+author.bk]
-              ==
+              %+  weld
+                :~  ['book-id' s+(scot %uv bid)]
+                    ['author' s+author.bk]
+                    ['s3-url' s+s3-url.bk]
+                ==
+              ^-  (list [@t json])
+              ?:(=('' bh) ~ ~[['content-hash' s+bh]])
           ==
         :~  [%pass /last/scrobble %agent [our.bowl %last] %poke %json !>(jon)]
         ==
@@ -398,6 +431,7 @@
         ?.  &(first-open last-scrobble)  ~
         =/  bk=(unit book:boox)  (~(get by books) bid)
         ?~  bk  ~
+        =/  bh=@t  (~(gut by book-hashes) bid '')
         =/  jon=json
           %-  pairs:enjs:format
           :~  ['action' s+'scrobble']
@@ -407,9 +441,13 @@
               ['source' s+'boox']
               :-  'meta'
               %-  pairs:enjs:format
-              :~  ['book-id' s+(scot %uv bid)]
-                  ['author' s+author.u.bk]
-              ==
+              %+  weld
+                :~  ['book-id' s+(scot %uv bid)]
+                    ['author' s+author.u.bk]
+                    ['s3-url' s+s3-url.u.bk]
+                ==
+              ^-  (list [@t json])
+              ?:(=('' bh) ~ ~[['content-hash' s+bh]])
           ==
         :~  [%pass /last/scrobble %agent [our.bowl %last] %poke %json !>(jon)]
         ==
@@ -642,6 +680,8 @@
                 ['cover-url' s+cover-url.u.bk]
                 ['file-size' (numb:enjs:format file-size.u.bk)]
                 ['description' s+description.u.bk]
+                ['content-hash' s+(~(gut by book-hashes) bid '')]
+                ['annas-found' b+(~(gut by annas-found) bid %.n)]
                 ['tags' [%a (turn ~(tap in tags.u.bk) |=(t=@t s+t))]]
                 :-  'notations'
                 :-  %a
@@ -850,6 +890,8 @@
               ['file-size' (numb:enjs:format file-size.bk)]
               ['date-added' (sect:enjs:format date-added.bk)]
               ['description' s+description.bk]
+              ['content-hash' s+(~(gut by book-hashes) bid '')]
+              ['annas-found' b+(~(gut by annas-found) bid %.n)]
               ['tags' [%a (turn ~(tap in tags.bk) |=(t=@t s+t))]]
               :-  'notations'
               :-  %a
@@ -1123,6 +1165,8 @@
               ['file-size' (numb:enjs:format file-size.bk)]
               ['date-added' (sect:enjs:format date-added.bk)]
               ['description' s+description.bk]
+              ['content-hash' s+(~(gut by book-hashes) bid '')]
+              ['annas-found' b+(~(gut by annas-found) bid %.n)]
               :-  'tags'
               [%a (turn ~(tap in tags.bk) |=(t=@t s+t))]
               :-  'position'
@@ -1155,6 +1199,8 @@
           ['file-size' (numb:enjs:format file-size.u.bk)]
           ['date-added' (sect:enjs:format date-added.u.bk)]
           ['description' s+description.u.bk]
+          ['content-hash' s+(~(gut by book-hashes) u.bid '')]
+          ['annas-found' b+(~(gut by annas-found) u.bid %.n)]
           :-  'tags'
           [%a (turn ~(tap in tags.u.bk) |=(t=@t s+t))]
           :-  'position'
@@ -1286,6 +1332,7 @@
           ['opds-password' s+opds-password]
           ['last-scrobble' b+last-scrobble]
           ['last-scrobble-upload' b+last-scrobble-upload]
+          ['annas-domain' s+?:(=('' annas-domain) 'annas-archive.gl' annas-domain)]
       ==
     ::
     ::  OPDS catalog feeds
@@ -1459,6 +1506,14 @@
             %'toggle-last-scrobble-upload'
           [%toggle-last-scrobble-upload ~]
         ::
+            %'set-annas-domain'
+          [%set-annas-domain ((ot ~[domain+so]) jon)]
+        ::
+            %'set-book-hash'
+          =/  f  (ot ~[book-id+(se %uv) hash+so])
+          =/  [bid=@uv hash=@t]  (f jon)
+          [%set-book-hash bid hash]
+        ::
             %'scrobble-to-last'
           [%scrobble-to-last ((ot ~[book-id+(se %uv)]) jon)]
         ::
@@ -1593,6 +1648,8 @@
               ['file-size' (numb:enjs:format file-size.bk)]
               ['date-added' (sect:enjs:format date-added.bk)]
               ['description' s+description.bk]
+              ['content-hash' s+(~(gut by book-hashes) bid '')]
+              ['annas-found' b+(~(gut by annas-found) bid %.n)]
               ['tags' [%a (turn ~(tap in tags.bk) |=(t=@t s+t))]]
           ==
       ==
@@ -1608,5 +1665,14 @@
       ~?  !accepted.sign  [dap.bowl %binding-rejected binding.sign]
       [~ this]
     [~ this]
+  ::
+      [%annas @ ~]
+    =/  bid=book-id:boox  (slav %uv i.t.wire)
+    ?.  ?=([%iris %http-response *] sign)  `this
+    =/  resp=client-response:iris  client-response.sign
+    ?.  ?=(%finished -.resp)  `this
+    =/  code=@ud  status-code.response-header.resp
+    =.  annas-found  (~(put by annas-found) bid =(200 code))
+    `this
   ==
 --
