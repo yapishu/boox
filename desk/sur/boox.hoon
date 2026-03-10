@@ -136,6 +136,35 @@
       notations=(map book-id (map @uv notation))
   ==
 ::
++$  state-7
+  $:  %7
+      books=(map book-id book)
+      positions=(map book-id position)
+      book-order=(list book-id)
+      collections=(map @t collection)
+      pending=(map @uv pending-book)
+      opds-enabled=?
+      opds-password=@t
+      readable-colls=(set @t)
+      notations=(map book-id (map @uv notation))
+      last-scrobble=?
+  ==
+::
++$  state-8
+  $:  %8
+      books=(map book-id book)
+      positions=(map book-id position)
+      book-order=(list book-id)
+      collections=(map @t collection)
+      pending=(map @uv pending-book)
+      opds-enabled=?
+      opds-password=@t
+      readable-colls=(set @t)
+      notations=(map book-id (map @uv notation))
+      last-scrobble=?
+      last-scrobble-upload=?
+  ==
+::
 +$  versioned-state
   $%  state-0
       state-1
@@ -144,6 +173,8 @@
       state-4
       state-5
       state-6
+      state-7
+      state-8
   ==
 ::
 ::  poke actions
@@ -171,6 +202,9 @@
       ::  settings
       [%toggle-opds ~]
       [%set-opds-password password=@t]
+      [%toggle-last-scrobble ~]
+      [%toggle-last-scrobble-upload ~]
+      [%scrobble-to-last =book-id]
       ::  social: owner-initiated
       [%browse-ship ship=@p]
       [%send-book =book-id to=@p]

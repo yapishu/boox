@@ -794,9 +794,36 @@ body {
   justify-content: center;
   padding: 1rem;
 }
-.pdf-viewer canvas {
+.pdf-page-wrap {
+  position: relative;
+}
+.pdf-page-wrap canvas {
+  display: block;
   max-width: 100%;
   height: auto;
+}
+.pdf-text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  opacity: 0.25;
+  line-height: 1;
+}
+.pdf-text-layer > span {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  cursor: text;
+}
+.pdf-text-layer > span::selection {
+  background: rgba(0, 100, 200, 0.3);
+}
+.pdf-text-layer .boox-pdf-highlight {
+  background: rgba(251, 191, 36, 0.3) !important;
+  color: transparent;
+  border-radius: 2px;
+  cursor: pointer;
 }
 
 /* Text reader */
@@ -898,6 +925,23 @@ body {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+.upload-coll-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+.upload-coll-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.upload-coll-pick input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
 }
 
 .upload-item {
@@ -1542,4 +1586,73 @@ body {
 }
 .toast-success {
   border-color: var(--accent);
+}
+
+/* ── Feed (from %last) ── */
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.feed-card {
+  display: flex;
+  gap: 0.75rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+.feed-card-img {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.feed-card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.feed-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.feed-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  margin-bottom: 0.15rem;
+}
+.feed-card-ship {
+  color: var(--accent);
+  font-family: monospace;
+  font-size: 0.65rem;
+}
+.feed-card-verb {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.feed-card-time {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.feed-card-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.empty-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.empty-hint code {
+  background: var(--bg);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
 }

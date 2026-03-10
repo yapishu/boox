@@ -143,6 +143,34 @@ window.BooxAPI = {
     return this.poke({ action: 'set-opds-password', password });
   },
 
+  // Toggle last scrobble on first open
+  toggleLastScrobble() {
+    return this.poke({ action: 'toggle-last-scrobble' });
+  },
+
+  // Toggle last scrobble on upload
+  toggleLastScrobbleUpload() {
+    return this.poke({ action: 'toggle-last-scrobble-upload' });
+  },
+
+  // Manually scrobble a book to %last
+  scrobbleToLast(bookId) {
+    return this.poke({ action: 'scrobble-to-last', 'book-id': bookId });
+  },
+
+  // Get %last feed (cross-app, for boox feed tab)
+  async getLastFeed() {
+    const res = await fetch('/apps/last/api/feed', { credentials: 'include' });
+    if (!res.ok) throw new Error(`Last feed: ${res.status}`);
+    return res.json();
+  },
+
+  async getLastPeers() {
+    const res = await fetch('/apps/last/api/peers', { credentials: 'include' });
+    if (!res.ok) throw new Error(`Last peers: ${res.status}`);
+    return res.json();
+  },
+
   // Notations
   addNotation(bookId, nid, anchor, selected, note) {
     return this.poke({

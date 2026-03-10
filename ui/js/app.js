@@ -160,6 +160,7 @@ window.App = {
           <div id="collections-view" class="hidden"></div>
           <div id="upload-view" class="hidden"></div>
           <div id="settings-view" class="hidden"></div>
+          <div id="feed-view" class="hidden"></div>
         </div>
 
         <div id="reader-view" class="reader-view hidden">
@@ -201,6 +202,9 @@ window.App = {
         </button>
         <button class="nav-item" onclick="App.showUpload()" data-view="upload">
           <span class="nav-icon">\u2191</span><span class="nav-label">Upload</span>
+        </button>
+        <button class="nav-item" onclick="App.showFeed()" data-view="feed">
+          <span class="nav-icon">\u{1F4E1}</span><span class="nav-label">Feed</span>
         </button>
         <button class="nav-item" onclick="App.showSettings()" data-view="settings">
           <span class="nav-icon">\u2699</span><span class="nav-label">Settings</span>
@@ -440,6 +444,7 @@ window.App = {
       <button onclick="App.editBook('${bookId}')">Edit metadata</button>
       <button onclick="App.showAddToCollection('${bookId}')">Add to collection</button>
       <button onclick="App.showSendToFriend('${bookId}')">Send to pal</button>
+      <button onclick="App.scrobbleToLast('${bookId}')">Scrobble to %last</button>
       <button onclick="App.confirmDeleteBook('${bookId}')" style="color:var(--danger)">Delete</button>
     `;
     menu.style.left = event.clientX + 'px';
@@ -517,6 +522,7 @@ window.App = {
     document.getElementById('settings-view')?.classList.add('hidden');
     document.getElementById('upload-view')?.classList.add('hidden');
     document.getElementById('collections-view')?.classList.add('hidden');
+    document.getElementById('feed-view')?.classList.add('hidden');
   },
 
   showDashboard() {
@@ -683,7 +689,7 @@ window.App = {
     else if (files.length > 1) this.prepareBulkUpload(files);
   },
 
-  prepareUpload(file) {
+  async prepareUpload(file) {
     const ext = file.name.split('.').pop().toLowerCase();
     const formats = { pdf: 'pdf', epub: 'epub', mobi: 'mobi', txt: 'txt', md: 'md', html: 'html', htm: 'html' };
     const format = formats[ext];
@@ -695,6 +701,9 @@ window.App = {
     this._pendingFile = file;
     this._pendingFormat = format;
     this._pendingCoverFile = null;
+
+    await this.loadCollections();
+    const collNames = Object.keys(this.state.collections);
 
     const title = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
     const sizeStr = file.size > 1048576
@@ -737,6 +746,19 @@ window.App = {
           </div>
           <div id="cover-preview"></div>
         </div>
+        ${collNames.length > 0 ? `
+        <div class="form-group">
+          <label>Add to Collections</label>
+          <div class="upload-coll-picks">
+            ${collNames.map(n => `
+              <label class="upload-coll-pick">
+                <input type="checkbox" value="${this.escapeHtml(n)}" class="upload-coll-check">
+                ${this.escapeHtml(n)}
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        ` : ''}
         <div id="upload-progress-area"></div>
         <div class="upload-form-actions">
           <button class="btn" onclick="App.renderUploadView()">Cancel</button>
@@ -829,11 +851,18 @@ window.App = {
         tags, description
       });
 
+      // Add to selected collections
+      const selectedColls = [...document.querySelectorAll('.upload-coll-check:checked')]
+        .map(cb => cb.value);
+      for (const name of selectedColls) {
+        try { await BooxAPI.addToCollection(name, bookId); } catch (e) { console.warn(e); }
+      }
+
       await this.loadBooks();
 
       document.getElementById('upload-form-area').innerHTML = `
         <div class="upload-success">
-          <p>\u2713 "${this.escapeHtml(title)}" uploaded!</p>
+          <p>\u2713 "${this.escapeHtml(title)}" uploaded!${selectedColls.length > 0 ? ` Added to: ${selectedColls.join(', ')}` : ''}</p>
           <button class="btn btn-primary" onclick="App.renderUploadView()">Upload Another</button>
         </div>
       `;
@@ -1328,6 +1357,7 @@ window.App = {
       }
     }
 
+    this._remoteBooks = [];
     results.innerHTML = `
       <div class="section-label">${this.escapeHtml(ship)} \u2014 ${collections.length} shared collection${collections.length !== 1 ? 's' : ''}</div>
       <div class="coll-list">
@@ -1355,6 +1385,7 @@ window.App = {
                   </div>
                   ${hasMatch ? `<button class="btn btn-sm" onclick="App.openBookWithFriendNotes('${local.id}', '${this.escapeHtml(ship)}')" title="You have this book — view their notes">\u{1F4DD} ${noteCount}</button>` : ''}
                   ${local && !hasMatch ? `<span style="font-size:0.65rem;color:var(--text-muted)">In library</span>` : ''}
+                  ${!local && b['s3-url'] ? `<button class="btn btn-sm btn-primary" data-grab-idx="${this._remoteBooks.length}" onclick="App.grabBook(this)">Grab</button>${(this._remoteBooks.push(b), '')[0] || ''}` : ''}
                 </div>`;
               }).join('')}
             </div>
@@ -1524,6 +1555,74 @@ window.App = {
     }
   },
 
+  // -- Grab from friend --
+
+  async grabBook(btnEl) {
+    const idx = parseInt(btnEl.dataset.grabIdx, 10);
+    const book = this._remoteBooks?.[idx];
+    if (!book || !book['s3-url']) {
+      toast('No file URL to grab', 'error');
+      return;
+    }
+
+    const row = btnEl.closest('.coll-book-item');
+    if (row) { row.style.opacity = '0.5'; row.style.pointerEvents = 'none'; }
+    btnEl.textContent = 'Grabbing\u2026';
+    btnEl.disabled = true;
+
+    try {
+      const response = await fetch(book['s3-url']);
+      if (!response.ok) throw new Error('Failed to download file');
+      const blob = await response.blob();
+      const file = new File([blob], `${book.title}.${book.format}`, { type: blob.type });
+      const result = await S3Upload.upload(file);
+
+      let coverUrl = '';
+      if (book['cover-url']) {
+        try {
+          const coverResp = await fetch(book['cover-url']);
+          if (coverResp.ok) {
+            const coverBlob = await coverResp.blob();
+            const coverFile = new File([coverBlob], 'cover.jpg', { type: coverBlob.type });
+            const coverResult = await S3Upload.upload(coverFile);
+            coverUrl = coverResult.url;
+          }
+        } catch (e) {
+          coverUrl = book['cover-url'];
+        }
+      }
+
+      const uvChars = '0123456789abcdefghijklmnopqrstuv';
+      const bytes = crypto.getRandomValues(new Uint8Array(20));
+      let raw = '';
+      for (const b of bytes) raw += uvChars[b & 31];
+      const groups = raw.match(/.{1,5}/g);
+      groups[0] = groups[0].replace(/^0+/, '') || '0';
+      const bookId = '0v' + groups.join('.');
+
+      await BooxAPI.addBook(bookId, {
+        title: book.title,
+        author: book.author || '',
+        format: book.format,
+        's3-url': result.url,
+        'cover-url': coverUrl,
+        'file-size': book['file-size'] || file.size,
+        tags: book.tags || [],
+        description: book.description || ''
+      });
+
+      await this.loadBooks();
+      btnEl.textContent = '\u2713 Grabbed';
+      if (row) { row.style.opacity = '1'; row.style.pointerEvents = ''; }
+      toast(`"${book.title}" added to library!`, 'success');
+    } catch (e) {
+      toast('Grab failed: ' + e.message, 'error');
+      if (row) { row.style.opacity = '1'; row.style.pointerEvents = ''; }
+      btnEl.textContent = 'Grab';
+      btnEl.disabled = false;
+    }
+  },
+
   // -- Send to Pal --
 
   async showSendToFriend(bookId) {
@@ -1605,6 +1704,98 @@ window.App = {
     }
   },
 
+  // -- Feed (from %last) --
+
+  async showFeed() {
+    this.state.view = 'feed';
+    this.showDashboard();
+    this.hideAllViews();
+    document.getElementById('feed-view').classList.remove('hidden');
+    document.getElementById('filters-bar').classList.add('hidden');
+    this.setActiveNav('feed');
+
+    const view = document.getElementById('feed-view');
+    view.innerHTML = '<div class="loading-spinner">Loading feed...</div>';
+
+    try {
+      const [feedData, peersData] = await Promise.all([
+        BooxAPI.getLastFeed(),
+        BooxAPI.getLastPeers(),
+      ]);
+
+      // own scrobbles from boox
+      const own = (feedData.scrobbles || [])
+        .filter(s => s.source === 'boox')
+        .map(s => ({ ...s, ship: feedData.ship }));
+
+      // friends' scrobbles from boox
+      const peerEntries = Object.entries(peersData.peers || {});
+      const friends = [];
+      for (const [ship, items] of peerEntries) {
+        for (const sc of items) {
+          if (sc.source === 'boox') friends.push({ ...sc, ship });
+        }
+      }
+
+      const all = [...own, ...friends].sort((a, b) => b.when - a.when);
+
+      if (all.length === 0) {
+        view.innerHTML = `
+          <div class="empty-state">
+            <p>No reading activity yet.</p>
+            <p class="empty-hint">Books you upload or open will appear here, along with your friends' reading activity.</p>
+          </div>
+        `;
+        return;
+      }
+
+      view.innerHTML = `
+        <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem">
+          <a href="/apps/last?tab=friends&source=boox" class="btn btn-sm" style="text-decoration:none">View in %last</a>
+        </div>
+        <div class="feed-list">
+          ${all.map(sc => this.renderFeedCard(sc)).join('')}
+        </div>
+      `;
+    } catch (e) {
+      view.innerHTML = `
+        <div class="empty-state">
+          <p>Could not load feed.</p>
+          <p class="empty-hint">Make sure %last is installed: <code>|install ~matwet %last</code></p>
+        </div>
+      `;
+    }
+  },
+
+  renderFeedCard(sc) {
+    const time = this.timeAgo(sc.when * 1000);
+    return `
+      <div class="feed-card">
+        ${sc.image ? `<div class="feed-card-img"><img src="${this.escapeHtml(sc.image)}" alt="" loading="lazy" /></div>` : ''}
+        <div class="feed-card-body">
+          <div class="feed-card-meta">
+            <span class="feed-card-ship">${this.escapeHtml(sc.ship)}</span>
+            <span class="feed-card-verb">${this.escapeHtml(sc.verb)}</span>
+            <span class="feed-card-time">${time}</span>
+          </div>
+          <div class="feed-card-name">${this.escapeHtml(sc.name)}</div>
+        </div>
+      </div>
+    `;
+  },
+
+  timeAgo(ts) {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString();
+  },
+
   // -- Settings --
 
   async showSettings() {
@@ -1622,10 +1813,14 @@ window.App = {
 
     let opdsEnabled = false;
     let opdsPassword = '';
+    let lastScrobble = false;
+    let lastScrobbleUpload = true;
     try {
       const settings = await BooxAPI.getSettings();
       opdsEnabled = settings['opds-enabled'] || false;
       opdsPassword = settings['opds-password'] || '';
+      lastScrobble = settings['last-scrobble'] || false;
+      lastScrobbleUpload = settings['last-scrobble-upload'] ?? true;
     } catch (e) {}
 
     const opdsUrl = `${window.location.origin}/apps/boox/api/opds`;
@@ -1672,6 +1867,21 @@ window.App = {
           ` : ''}
         </div>
         <div class="settings-section">
+          <h3>%last Scrobbling</h3>
+          <p class="settings-hint">
+            Scrobble reading activity to %last. See the Feed tab for your reading timeline.
+            Install %last: <code style="font-size:0.8em">|install ~matwet %last</code>
+          </p>
+          <label class="toggle-row">
+            <span>Scrobble on upload</span>
+            <button class="toggle-btn ${lastScrobbleUpload ? 'active' : ''}" onclick="App.toggleLastScrobbleUpload()">${lastScrobbleUpload ? 'On' : 'Off'}</button>
+          </label>
+          <label class="toggle-row">
+            <span>Scrobble on first open</span>
+            <button class="toggle-btn ${lastScrobble ? 'active' : ''}" onclick="App.toggleLastScrobble()">${lastScrobble ? 'On' : 'Off'}</button>
+          </label>
+        </div>
+        <div class="settings-section">
           <h3>Theme</h3>
           <p class="settings-hint">Current: ${this.state.theme === 'dark' ? 'Dark' : 'Light'}</p>
           <button class="btn" onclick="App.toggleTheme()">Toggle Theme</button>
@@ -1686,6 +1896,33 @@ window.App = {
       await this.showSettings();
     } catch (e) {
       toast('Failed to toggle OPDS: ' + e.message, 'error');
+    }
+  },
+
+  async toggleLastScrobble() {
+    try {
+      await BooxAPI.toggleLastScrobble();
+      await this.showSettings();
+    } catch (e) {
+      toast('Failed to toggle %last scrobble: ' + e.message, 'error');
+    }
+  },
+
+  async toggleLastScrobbleUpload() {
+    try {
+      await BooxAPI.toggleLastScrobbleUpload();
+      await this.showSettings();
+    } catch (e) {
+      toast('Failed to toggle %last upload scrobble: ' + e.message, 'error');
+    }
+  },
+
+  async scrobbleToLast(bookId) {
+    try {
+      await BooxAPI.scrobbleToLast(bookId);
+      toast('Scrobbled to %last');
+    } catch (e) {
+      toast('Failed to scrobble: ' + e.message, 'error');
     }
   },
 

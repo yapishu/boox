@@ -186,7 +186,7 @@
 --
 ::
 %-  agent:dbug
-=|  state-6:boox
+=|  state-8:boox
 =*  state  -
 =/  remote-cache  *(map @p json)
 %+  verb  |
@@ -220,28 +220,34 @@
         [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
   ?-  -.old
-      %6  [cleanup this(state old)]
+      %8  [cleanup this(state old)]
+  ::
+      %7
+    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old %.y])]
+  ::
+      %6
+    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old %.n %.y])]
   ::
       %5
-    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old ~])]
+    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old ~ %.n %.y])]
   ::
       %4
-    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~ ~])]
+    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~ ~ %.n %.y])]
   ::
       %3
-    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~ ~])]
+    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~ ~ %.n %.y])]
   ::
       %2
-    [cleanup this(state [%6 books.old positions.old book-order.old collections.old pending.old %.n '' ~ ~])]
+    [cleanup this(state [%8 books.old positions.old book-order.old collections.old pending.old %.n '' ~ ~ %.n %.y])]
   ::
       %1
-    [cleanup this(state [%6 books.old positions.old book-order.old collections.old ~ %.n '' ~ ~])]
+    [cleanup this(state [%8 books.old positions.old book-order.old collections.old ~ %.n '' ~ ~ %.n %.y])]
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    [cleanup this(state [%6 books.old positions.old book-order.old new-colls ~ %.n '' ~ ~])]
+    [cleanup this(state [%8 books.old positions.old book-order.old new-colls ~ %.n '' ~ ~ %.n %.y])]
   ==
 ::
 ++  on-init
@@ -300,13 +306,61 @@
       =.  opds-password  password.act
       `this
     ::
+        %toggle-last-scrobble
+      =.  last-scrobble  !last-scrobble
+      `this
+    ::
+        %toggle-last-scrobble-upload
+      =.  last-scrobble-upload  !last-scrobble-upload
+      `this
+    ::
+        %scrobble-to-last
+      =/  bid  book-id.act
+      =/  bk=(unit book:boox)  (~(get by books) bid)
+      ?~  bk  `this
+      =/  jon=json
+        %-  pairs:enjs:format
+        :~  ['action' s+'scrobble']
+            ['verb' s+'reading']
+            ['name' s+title.u.bk]
+            ['image' s+cover-url.u.bk]
+            ['source' s+'boox']
+            :-  'meta'
+            %-  pairs:enjs:format
+            :~  ['book-id' s+(scot %uv bid)]
+                ['author' s+author.u.bk]
+            ==
+        ==
+      :_  this
+      :~  [%pass /last/scrobble %agent [our.bowl %last] %poke %json !>(jon)]
+      ==
+    ::
         %add-book
       =/  bid  book-id.act
       =/  bk   book.act
       =.  date-added.bk  now.bowl
       =.  books  (~(put by books) bid bk)
       =.  book-order  (snoc book-order bid)
+      =/  upload-cards=(list card)
+        ?.  last-scrobble-upload  ~
+        =/  jon=json
+          %-  pairs:enjs:format
+          :~  ['action' s+'scrobble']
+              ['verb' s+'reading']
+              ['name' s+title.bk]
+              ['image' s+cover-url.bk]
+              ['source' s+'boox']
+              :-  'meta'
+              %-  pairs:enjs:format
+              :~  ['book-id' s+(scot %uv bid)]
+                  ['author' s+author.bk]
+              ==
+          ==
+        :~  [%pass /last/scrobble %agent [our.bowl %last] %poke %json !>(jon)]
+        ==
       :_  this
+      %+  weld  upload-cards
+      ^-  (list card)
       :~  [%give %fact ~[/updates] boox-update+!>([%book-added bid bk])]
       ==
     ::
@@ -336,10 +390,32 @@
     ::
         %set-position
       =/  bid  book-id.act
+      =/  first-open=?  !(~(has by positions) bid)
       =/  pos=position:boox
         position.act(updated-at now.bowl)
       =.  positions  (~(put by positions) bid pos)
+      =/  scrobble-cards=(list card)
+        ?.  &(first-open last-scrobble)  ~
+        =/  bk=(unit book:boox)  (~(get by books) bid)
+        ?~  bk  ~
+        =/  jon=json
+          %-  pairs:enjs:format
+          :~  ['action' s+'scrobble']
+              ['verb' s+'reading']
+              ['name' s+title.u.bk]
+              ['image' s+cover-url.u.bk]
+              ['source' s+'boox']
+              :-  'meta'
+              %-  pairs:enjs:format
+              :~  ['book-id' s+(scot %uv bid)]
+                  ['author' s+author.u.bk]
+              ==
+          ==
+        :~  [%pass /last/scrobble %agent [our.bowl %last] %poke %json !>(jon)]
+        ==
       :_  this
+      %+  weld  scrobble-cards
+      ^-  (list card)
       :~  [%give %fact ~[/updates] boox-update+!>([%position-updated bid pos])]
       ==
     ::
@@ -521,7 +597,19 @@
     ^-  (quip card _this)
     =/  pid=@uv  `@uv`eny.bowl
     =.  pending  (~(put by pending) pid [from bk now.bowl])
-    `this
+    =/  hark-cards=(list card)
+      =/  res=(each (list card) tang)
+        %-  mule  |.
+        =/  yarn-id  (end 7 (shas %boox-book-received eny.bowl))
+        =/  msg=@t  (crip "{(trip (scot %p from))} sent you: {(trip title.bk)}")
+        =/  con  ~[[%text msg]]
+        =/  rop  [[~ our.bowl %boox] [~ %boox our.bowl %boox] %boox /]
+        =/  wer=path  /apps/boox
+        :~  [%pass /hark %agent [our.bowl %hark] %poke %hark-action !>([%add-yarn & & yarn-id rop now.bowl con wer ~])]
+        ==
+      ?:(?=(%& -.res) p.res ~)
+    :_  this
+    hark-cards
   ::
   ++  build-shared-data
     ^-  json
@@ -1196,6 +1284,8 @@
       %-  pairs:enjs:format
       :~  ['opds-enabled' b+opds-enabled]
           ['opds-password' s+opds-password]
+          ['last-scrobble' b+last-scrobble]
+          ['last-scrobble-upload' b+last-scrobble-upload]
       ==
     ::
     ::  OPDS catalog feeds
@@ -1363,6 +1453,15 @@
             %'set-opds-password'
           [%set-opds-password ((ot ~[password+so]) jon)]
         ::
+            %'toggle-last-scrobble'
+          [%toggle-last-scrobble ~]
+        ::
+            %'toggle-last-scrobble-upload'
+          [%toggle-last-scrobble-upload ~]
+        ::
+            %'scrobble-to-last'
+          [%scrobble-to-last ((ot ~[book-id+(se %uv)]) jon)]
+        ::
             %'browse-ship'
           [%browse-ship ((ot ~[ship+(se %p)]) jon)]
         ::
@@ -1422,6 +1521,19 @@
     ?+  -.sign  (on-agent:def wire sign)
         %poke-ack
       `this
+    ==
+  ::
+      [%last *]
+    ?+  -.sign  `this
+        %poke-ack
+      ?~  p.sign  `this
+      ~&  [%boox-last-scrobble-failed u.p.sign]
+      `this
+    ==
+  ::
+      [%hark ~]
+    ?+  -.sign  `this
+        %poke-ack  `this
     ==
   ==
 ::

@@ -34,7 +34,11 @@ window.Reader = {
     const format = book.format;
     switch (format) {
       case 'epub': return this.openEpub(book);
-      case 'pdf':  return this.openPdf(book);
+      case 'pdf': {
+        const ctrl = await this.openPdf(book);
+        this._pdfControls = ctrl;
+        return ctrl;
+      }
       case 'txt':  return this.openText(book);
       case 'md':   return this.openMarkdown(book);
       case 'html': return this.openHtml(book);
@@ -59,6 +63,7 @@ window.Reader = {
     }
     this.currentBook = null;
     this._epubBook = null;
+    this._pdfControls = null;
     this._notations = [];
     this._dismissPopups();
     const existing = document.getElementById('reader-font-settings');
@@ -235,12 +240,17 @@ window.Reader = {
     this.notationsVisible = !this.notationsVisible;
     localStorage.setItem('boox-notations-visible', JSON.stringify(this.notationsVisible));
     if (this.rendition) {
+      // EPUB
       if (this.notationsVisible) {
         this._applyNotationHighlights();
       } else {
         this._clearNotationHighlights();
       }
     }
+    // PDF: just toggle highlight visibility via CSS
+    document.querySelectorAll('.boox-pdf-highlight').forEach(s => {
+      s.style.background = this.notationsVisible ? '' : 'transparent';
+    });
   },
 
   toggleNotationList() {
@@ -252,7 +262,7 @@ window.Reader = {
     panel.className = 'notation-sidebar';
 
     if (this._notations.length === 0) {
-      panel.innerHTML = '<div class="notation-sidebar-empty">No notations yet. Select text in an EPUB to add one.</div>';
+      panel.innerHTML = '<div class="notation-sidebar-empty">No notations yet. Select text to add one.</div>';
     } else {
       panel.innerHTML = this._notations.map(n => `
         <div class="notation-sidebar-item" onclick="Reader.goToNotation('${this.escapeHtml(n.anchor)}')">
@@ -266,7 +276,11 @@ window.Reader = {
   },
 
   goToNotation(anchor) {
-    if (this.rendition && anchor) {
+    if (anchor && anchor.startsWith('pdf:')) {
+      // Navigate to PDF page
+      const pageNum = parseInt(anchor.split(':')[1]);
+      if (this._pdfControls && pageNum) this._pdfControls.goTo(pageNum);
+    } else if (this.rendition && anchor) {
       this.rendition.display(anchor);
     }
     const panel = document.getElementById('reader-notation-list');
@@ -341,8 +355,15 @@ window.Reader = {
     this._dismissPopups();
     this._pendingNotation = null;
 
-    // Apply highlight
-    if (this.rendition && this.notationsVisible) {
+    // Apply highlight based on format
+    if (notation.anchor.startsWith('pdf:')) {
+      // Re-highlight the current PDF text layer
+      const tl = document.querySelector('.pdf-text-layer');
+      if (tl && this.notationsVisible) {
+        const pageNum = parseInt(notation.anchor.split(':')[1]);
+        this._applyPdfHighlights(tl, pageNum);
+      }
+    } else if (this.rendition && this.notationsVisible) {
       try {
         this.rendition.annotations.highlight(
           notation.anchor, { id: nid },
@@ -388,7 +409,12 @@ window.Reader = {
     const notation = this._notations[idx];
 
     // Remove highlight
-    if (this.rendition) {
+    if (notation.anchor && notation.anchor.startsWith('pdf:')) {
+      document.querySelectorAll(`.boox-pdf-highlight[data-notation-id="${nid}"]`).forEach(s => {
+        s.classList.remove('boox-pdf-highlight');
+        delete s.dataset.notationId;
+      });
+    } else if (this.rendition) {
       try { this.rendition.annotations.remove(notation.anchor, 'highlight'); } catch (e) {}
     }
 
@@ -486,12 +512,16 @@ window.Reader = {
     return { prev: () => this.rendition.prev(), next: () => this.rendition.next() };
   },
 
-  // PDF - using pdf.js (with zoom controls)
+  // PDF - using pdf.js (with zoom controls + text layer for annotations)
   async openPdf(book) {
     let pdfScale = parseFloat(localStorage.getItem('boox-pdf-scale') || '0');
     const wrapper = document.createElement('div');
     wrapper.className = 'pdf-viewer';
     this.container.appendChild(wrapper);
+
+    const pageWrap = document.createElement('div');
+    pageWrap.className = 'pdf-page-wrap';
+    wrapper.appendChild(pageWrap);
 
     const loadingTask = pdfjsLib.getDocument(book['s3-url']);
     const pdf = await loadingTask.promise;
@@ -505,7 +535,14 @@ window.Reader = {
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    wrapper.appendChild(canvas);
+    pageWrap.appendChild(canvas);
+
+    // Text layer for selection + annotations
+    let textLayerDiv = document.createElement('div');
+    textLayerDiv.className = 'pdf-text-layer';
+    pageWrap.appendChild(textLayerDiv);
+
+    const self = this;
 
     const renderPage = async (num) => {
       const page = await pdf.getPage(num);
@@ -516,19 +553,54 @@ window.Reader = {
       const viewport = page.getViewport({ scale });
       canvas.height = viewport.height;
       canvas.width = viewport.width;
+      pageWrap.style.width = viewport.width + 'px';
+      pageWrap.style.height = viewport.height + 'px';
 
       await page.render({ canvasContext: ctx, viewport }).promise;
+
+      // Render text layer
+      textLayerDiv.innerHTML = '';
+      textLayerDiv.style.width = viewport.width + 'px';
+      textLayerDiv.style.height = viewport.height + 'px';
+      const textContent = await page.getTextContent();
+      // pdf.js 3.x uses pdfjsLib.renderTextLayer
+      const renderTask = pdfjsLib.renderTextLayer({
+        textContent,
+        container: textLayerDiv,
+        viewport,
+        textDivs: []
+      });
+      await renderTask.promise;
+
+      // Apply notation highlights for this page
+      self._applyPdfHighlights(textLayerDiv, num);
+
       currentPage = num;
       const progress = Math.round((num / totalPages) * 100);
       this.savePosition(String(num), progress);
       if (typeof App !== 'undefined') App.updateProgressMeter(progress);
     };
 
+    // Handle text selection for annotations
+    textLayerDiv.addEventListener('mouseup', () => {
+      const sel = window.getSelection();
+      const text = sel ? sel.toString().trim() : '';
+      if (text.length < 3) return;
+      self._showNotationPopup('pdf:' + currentPage, text);
+      sel.removeAllRanges();
+    });
+
+    // Keyboard nav for PDF
+    this._keyHandler = (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); if (currentPage < totalPages) renderPage(currentPage + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); if (currentPage > 1) renderPage(currentPage - 1); }
+    };
+    document.addEventListener('keydown', this._keyHandler);
+
     await renderPage(currentPage);
 
     const zoomIn = () => {
-      const page_promise = pdf.getPage(currentPage);
-      page_promise.then(page => {
+      pdf.getPage(currentPage).then(page => {
         const uv = page.getViewport({ scale: 1 });
         const fitScale = (wrapper.clientWidth || window.innerWidth - 32) / uv.width;
         const cur = pdfScale > 0 ? pdfScale : fitScale;
@@ -538,8 +610,7 @@ window.Reader = {
       });
     };
     const zoomOut = () => {
-      const page_promise = pdf.getPage(currentPage);
-      page_promise.then(page => {
+      pdf.getPage(currentPage).then(page => {
         const uv = page.getViewport({ scale: 1 });
         const fitScale = (wrapper.clientWidth || window.innerWidth - 32) / uv.width;
         const cur = pdfScale > 0 ? pdfScale : fitScale;
@@ -561,6 +632,52 @@ window.Reader = {
       zoomIn, zoomOut, zoomFit,
       totalPages
     };
+  },
+
+  // Highlight matching notation text in the PDF text layer
+  _applyPdfHighlights(textLayerDiv, pageNum) {
+    if (!this.notationsVisible) return;
+    const pageNotations = this._notations.filter(n =>
+      n.anchor && n.anchor.startsWith('pdf:') && parseInt(n.anchor.split(':')[1]) === pageNum
+    );
+    if (!pageNotations.length) return;
+
+    const spans = textLayerDiv.querySelectorAll('span');
+    for (const n of pageNotations) {
+      const needle = n.selected.toLowerCase();
+      // Try to find spans containing parts of the selected text
+      let found = false;
+      for (const span of spans) {
+        const spanText = span.textContent.toLowerCase();
+        if (spanText.includes(needle) || needle.includes(spanText)) {
+          if (spanText.trim().length > 0 && needle.includes(spanText.trim())) {
+            span.classList.add('boox-pdf-highlight');
+            span.dataset.notationId = n.id;
+            span.addEventListener('click', (e) => {
+              e.stopPropagation();
+              this._showNotationDetail(n, e);
+            });
+            found = true;
+          }
+        }
+      }
+      // Fallback: try matching first few words
+      if (!found) {
+        const words = needle.split(/\s+/).slice(0, 4).join(' ');
+        if (words.length > 3) {
+          for (const span of spans) {
+            if (span.textContent.toLowerCase().includes(words)) {
+              span.classList.add('boox-pdf-highlight');
+              span.dataset.notationId = n.id;
+              span.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._showNotationDetail(n, e);
+              });
+            }
+          }
+        }
+      }
+    }
   },
 
   // Plain text

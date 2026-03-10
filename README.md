@@ -13,7 +13,19 @@ An ebook reader and library manager for Urbit. Upload books to S3, read them in-
 - **S3 storage** — books stored on S3 via Landscape's `%storage` agent
 - **Reading positions** — synced progress across devices
 - **Collections** — organize books, share with other ships or publish publicly
+- **Annotations** — highlight text and add notes in both EPUB and PDF
+  - EPUB: CFI-based text anchoring via epub.js
+  - PDF: text layer overlay for selection and persistent highlights
+  - Notations visible on public collection pages
+- **Social** — browse friends' shared collections, send books to pals, view friend notations on books you both own (matched by title+author)
+- **Public pages** — unauthenticated collection pages with inline reader, swipe navigation, font/zoom controls, and deep linking
+- **Readable toggle** — control whether public collections allow reading or are showcase-only
 - **OPDS catalog** — expose your library to any OPDS-compatible reader (with Basic Auth)
+- **PDF zoom** — scale in/out with localStorage persistence
+- **EPUB typography** — adjustable font size, font family, and line height
+- **Mobile responsive** — touch swipe navigation, compact layouts, icon-only nav on narrow screens
+- **URL deep linking** — hash-based position preservation for private and public readers
+- **Library pagination** — configurable 10/20/50 per page
 - **Bulk upload** — add multiple books at once
 - **PWA** — installable as a standalone app on mobile/desktop
 
@@ -23,22 +35,23 @@ An ebook reader and library manager for Urbit. Upload books to S3, read them in-
 
 ```
 desk/                   Urbit desk (deployed to ship)
-  app/boox.hoon           Main agent — API, OPDS, PWA assets
-  sur/boox.hoon           Types: book, position, collection, action, update
+  app/boox.hoon           Main agent — API, state, OPDS, inline public page HTML
+  sur/boox.hoon           Types: book, position, collection, notation, state-0..6
   mar/boox-action.hoon    JSON<->noun action mark
   mar/boox-update.hoon    Update mark
   lib/                    Standard libraries (server, dbug, etc.)
 
 ui/                     Frontend source (Vite)
   index.html              SPA entry point
-  main.js                 Entry — imports modules, registers service worker
   js/api.js               API client (BooxAPI)
-  js/app.js               UI rendering and state (App)
-  js/reader.js            Book reader (Reader)
-  js/s3.js                S3 upload (S3Upload)
+  js/app.js               UI rendering, state, collections, social
+  js/reader.js            Multi-format reader with annotations and zoom
+  js/s3.js                S3 upload/signing (requires HTTPS — Web Crypto API)
   css/app.css             Styles
   vite.config.js          Vite config — uses vite-plugin-singlefile
 ```
+
+Agent state is at `state-6`: books, positions, book-order, collections, pending, opds-enabled, opds-password, readable-colls, notations.
 
 ## Development
 
@@ -60,30 +73,45 @@ npm run build    # outputs to ui/dist/
 
 ## API
 
-All endpoints are under `/apps/boox/api` and require Eyre authentication (cookie).
+All endpoints under `/apps/boox/api`. Authenticated endpoints require an Eyre session cookie.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/books` | List all books |
-| GET | `/api/book/<id>` | Get a single book |
-| GET | `/api/s3-config` | S3 configuration (from system `%storage`) |
-| GET | `/api/collections` | List collections |
-| GET | `/api/settings` | OPDS settings |
-| POST | `/api` | Poke with action JSON |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/books` | Eyre | List all books with notation counts |
+| GET | `/book/<id>` | Eyre | Single book with full notations |
+| GET | `/s3-config` | Eyre | S3 config from system `%storage` |
+| GET | `/collections` | Eyre | List collections |
+| GET | `/settings` | Eyre | OPDS settings |
+| GET | `/pals` | Eyre | Combined pals mutuals + contacts |
+| GET | `/pending` | Eyre | Pending book imports |
+| GET | `/opds` | Basic | OPDS catalog feed |
+| GET | `/public/collections` | None | Public collection list |
+| GET | `/public/<token>` | None | Public collection JSON with notations |
+| GET | `/public/<token>/page` | None | Public collection HTML page with inline reader |
+| POST | `/` | Eyre | Poke with action JSON |
 
-### Actions (POST /api)
+### Actions (POST)
 
 ```json
-{"add-book": {"book-id": "0v...", "book": {...}}}
-{"remove-book": {"book-id": "0v..."}}
-{"update-metadata": {"book-id": "0v...", "title": "...", ...}}
-{"set-position": {"book-id": "0v...", "position": {...}}}
-{"reorder-books": {"order": ["0v...", ...]}}
-{"create-collection": {"name": "...", "description": "..."}}
-{"toggle-opds": null}
-{"send-book": {"book-id": "0v...", "to": "~ship"}}
+{"action": "add-book", "book-id": "0v...", "title": "...", ...}
+{"action": "remove-book", "book-id": "0v..."}
+{"action": "set-position", "book-id": "0v...", "value": "...", "progress": 42}
+{"action": "add-notation", "book-id": "0v...", "nid": "0v...", "anchor": "...", "selected": "...", "note": "..."}
+{"action": "remove-notation", "book-id": "0v...", "nid": "0v..."}
+{"action": "create-collection", "name": "...", "description": "..."}
+{"action": "share-collection", "name": "..."}
+{"action": "publish-collection", "name": "..."}
+{"action": "toggle-readable", "name": "..."}
+{"action": "toggle-opds"}
+{"action": "send-book", "book-id": "0v...", "to": "~ship"}
 ```
 
 ### OPDS
 
 When enabled, an OPDS catalog is served at `/apps/boox/api/opds` with Basic Auth (username: ship name, password: configurable or `+code`).
+
+## Notes
+
+- S3 upload requires HTTPS or localhost — the Web Crypto API (`crypto.subtle`) is only available in secure contexts.
+- State upgrades (new `state-N`) require a nuke+revive cycle on the agent.
+- Frontend is distributed as a glob via docket (`glob-http`), not from Clay.
