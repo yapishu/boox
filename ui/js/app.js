@@ -18,6 +18,35 @@ window.toast = function toast(msg, type = 'info') {
   }, 3500);
 }
 
+// Convert hex MD5 string to @uv book ID, with random fallback
+function hexToUv(hex) {
+  if (!hex) return randomUv();
+  const clean = hex.replace(/[^0-9a-fA-F]/g, '');
+  if (!clean) return randomUv();
+  const n = BigInt('0x' + clean);
+  const uvChars = '0123456789abcdefghijklmnopqrstuv';
+  let result = '';
+  let val = n;
+  if (val === 0n) return '0v0';
+  while (val > 0n) {
+    result = uvChars[Number(val & 31n)] + result;
+    val >>= 5n;
+  }
+  const groups = result.match(/.{1,5}/g) || ['0'];
+  groups[0] = groups[0].replace(/^0+/, '') || '0';
+  return '0v' + groups.join('.');
+}
+
+function randomUv() {
+  const uvChars = '0123456789abcdefghijklmnopqrstuv';
+  const bytes = crypto.getRandomValues(new Uint8Array(20));
+  let raw = '';
+  for (const b of bytes) raw += uvChars[b & 31];
+  const groups = raw.match(/.{1,5}/g);
+  groups[0] = groups[0].replace(/^0+/, '') || '0';
+  return '0v' + groups.join('.');
+}
+
 window.App = {
   state: {
     books: [],
@@ -113,8 +142,12 @@ window.App = {
     let filled = 0;
     for (const book of needHash) {
       try {
-        const resp = await fetch(book['s3-url'], { method: 'HEAD' });
-        if (!resp.ok) continue;
+        // Use GET with range header to get ETag without downloading full file
+        // HEAD often hides ETag behind CORS, but GET exposes it
+        const resp = await fetch(book['s3-url'], {
+          method: 'GET',
+          headers: { 'Range': 'bytes=0-0' }
+        });
         const etag = (resp.headers.get('ETag') || '').replace(/"/g, '');
         if (etag) {
           await BooxAPI.setBookHash(book.id, etag);
@@ -123,7 +156,10 @@ window.App = {
       } catch (e) { /* skip */ }
     }
     if (filled > 0) await this.loadBooks();
-    localStorage.setItem('boox-hashes-backfilled', '1');
+    // Only mark done if we actually got some, otherwise CORS may be blocking
+    if (filled > 0 || needHash.length === 0) {
+      localStorage.setItem('boox-hashes-backfilled', '1');
+    }
     console.log(`Backfilled ${filled}/${needHash.length} content hashes`);
   },
 
@@ -880,13 +916,7 @@ window.App = {
       const statusEl = document.getElementById('upload-status');
       if (statusEl) statusEl.textContent = 'Saving...';
 
-      const uvChars = '0123456789abcdefghijklmnopqrstuv';
-      const bytes = crypto.getRandomValues(new Uint8Array(20));
-      let raw = '';
-      for (const b of bytes) raw += uvChars[b & 31];
-      const groups = raw.match(/.{1,5}/g);
-      groups[0] = groups[0].replace(/^0+/, '') || '0';
-      const bookId = '0v' + groups.join('.');
+      const bookId = hexToUv(result.etag);
 
       await BooxAPI.addBook(bookId, {
         title, author, format,
@@ -1563,14 +1593,7 @@ window.App = {
         }
       }
 
-      // Generate book ID
-      const uvChars = '0123456789abcdefghijklmnopqrstuv';
-      const bytes = crypto.getRandomValues(new Uint8Array(20));
-      let raw = '';
-      for (const b of bytes) raw += uvChars[b & 31];
-      const groups = raw.match(/.{1,5}/g);
-      groups[0] = groups[0].replace(/^0+/, '') || '0';
-      const bookId = '0v' + groups.join('.');
+      const bookId = hexToUv(result.etag);
 
       await BooxAPI.addBook(bookId, {
         title: book.title,
@@ -1647,13 +1670,9 @@ window.App = {
         }
       }
 
-      const uvChars = '0123456789abcdefghijklmnopqrstuv';
-      const bytes = crypto.getRandomValues(new Uint8Array(20));
-      let raw = '';
-      for (const b of bytes) raw += uvChars[b & 31];
-      const groups = raw.match(/.{1,5}/g);
-      groups[0] = groups[0].replace(/^0+/, '') || '0';
-      const bookId = '0v' + groups.join('.');
+      // Use source book's hash or new ETag as book ID
+      const hash = book['content-hash'] || result.etag || '';
+      const bookId = hexToUv(hash);
 
       await BooxAPI.addBook(bookId, {
         title: book.title,
@@ -1666,8 +1685,6 @@ window.App = {
         description: book.description || ''
       });
 
-      // Preserve content hash: prefer source book's hash, fallback to new ETag
-      const hash = book['content-hash'] || result.etag || '';
       if (hash) {
         try { await BooxAPI.setBookHash(bookId, hash); } catch (e) { console.warn('hash:', e); }
       }

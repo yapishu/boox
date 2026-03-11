@@ -219,11 +219,35 @@
         ::  bind our API endpoint
         [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
+  ::  backfill: HEAD s3 urls for books missing hashes
+  =/  backfill-cards=(list card)
+    |^
+    =/  remaining=(list book-id:boox)  book-order.old
+    =/  acc=(list card)  ~
+    |-
+    ?~  remaining  acc
+    =/  bid  i.remaining
+    ?:  (~(has by hashes) bid)  $(remaining t.remaining)
+    =/  bk=(unit book:boox)  (~(get by books.old) bid)
+    ?~  bk  $(remaining t.remaining)
+    ?:  =('' s3-url.u.bk)  $(remaining t.remaining)
+    =/  req=request:http  [%'HEAD' s3-url.u.bk ~ ~]
+    %=  $
+      remaining  t.remaining
+      acc  [[%pass /backfill/(scot %uv bid) %arvo %i %request req *outbound-config:iris] acc]
+    ==
+    ++  hashes
+      ?+  -.old
+        *(map book-id:boox @t)
+          %10  book-hashes.old
+          %9   book-hashes.old
+      ==
+    --
   ?-  -.old
-      %10  [cleanup this(state old)]
+      %10  [(weld cleanup backfill-cards) this(state old)]
   ::
       %9
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old book-hashes.old ~ 'annas-archive.gl'])]
+    [(weld cleanup backfill-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old book-hashes.old ~ 'annas-archive.gl'])]
   ::
       %8
     [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old ~ ~ 'annas-archive.gl'])]
@@ -1674,5 +1698,29 @@
     =/  code=@ud  status-code.response-header.resp
     =.  annas-found  (~(put by annas-found) bid =(200 code))
     `this
+  ::
+      [%backfill @ ~]
+    =/  bid=book-id:boox  (slav %uv i.t.wire)
+    ?.  ?=([%iris %http-response *] sign)  `this
+    =/  resp=client-response:iris  client-response.sign
+    ?.  ?=(%finished -.resp)  `this
+    =/  hdrs=(list [key=@t value=@t])
+      headers.response-header.resp
+    =/  etag=(unit @t)
+      |-
+      ?~  hdrs  ~
+      ?:  =('etag' (crip (cass (trip key.i.hdrs))))
+        `(crip (skip (trip value.i.hdrs) |=(c=@t =(c '"'))))
+      $(hdrs t.hdrs)
+    ?~  etag  `this
+    =.  book-hashes  (~(put by book-hashes) bid u.etag)
+    ::  also check anna's for this hash
+    =/  dom=@t  ?:(=('' annas-domain) 'annas-archive.gl' annas-domain)
+    =/  url=@t  (crip "https://{(trip dom)}/md5/{(trip u.etag)}")
+    =/  req=request:http  [%'GET' url ~ ~]
+    :_  this
+    ^-  (list card)
+    :~  [%pass /annas/(scot %uv bid) %arvo %i %request req *outbound-config:iris]
+    ==
   ==
 --
