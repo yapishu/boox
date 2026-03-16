@@ -1,5 +1,5 @@
 // S3 upload using system %storage credentials
-// Uses presigned URLs (AWS Signature V4) for uploads
+// Uses presigned URLs (S3-compatible Signature V4) for uploads
 
 window.S3Upload = {
   config: null,
@@ -17,13 +17,14 @@ window.S3Upload = {
 
   async upload(file, onProgress) {
     const config = await this.loadConfig();
-    if (!config.accessKeyId || !config.bucket) {
+    if (!config.accessKeyId || !config.bucket || !config.endpoint) {
       throw new Error('S3 not configured. Set up storage credentials in Landscape System Preferences.');
     }
 
     const key = this.generateKey(file.name);
     const contentType = file.type || 'application/octet-stream';
-    const endpoint = config.endpoint || `https://s3.${config.region || 'us-east-1'}.amazonaws.com`;
+    let endpoint = config.endpoint;
+    if (!/^https?:\/\//.test(endpoint)) endpoint = 'https://' + endpoint;
 
     const presignedUrl = await this.createPresignedUrl({
       endpoint,
@@ -40,8 +41,6 @@ window.S3Upload = {
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', presignedUrl);
       xhr.setRequestHeader('Content-Type', contentType);
-      xhr.setRequestHeader('Cache-Control', 'public, max-age=3600');
-      xhr.setRequestHeader('x-amz-acl', 'public-read');
 
       if (onProgress) {
         xhr.upload.onprogress = (e) => {
@@ -62,7 +61,10 @@ window.S3Upload = {
           const etag = (xhr.getResponseHeader('ETag') || '').replace(/"/g, '');
           resolve({ url, key, etag });
         } else {
-          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+          const body = xhr.responseText || '';
+          const match = body.match(/<Code>(.*?)<\/Code>.*?<Message>(.*?)<\/Message>/s);
+          const detail = match ? `${match[1]}: ${match[2]}` : `${xhr.status} ${xhr.statusText}`;
+          reject(new Error(`Upload failed: ${detail}`));
         }
       };
 
@@ -78,7 +80,7 @@ window.S3Upload = {
     const dateShort = dateStr.slice(0, 8);
     const scope = `${dateShort}/${region}/s3/aws4_request`;
 
-    const signedHeaders = 'cache-control;content-type;host;x-amz-acl';
+    const signedHeaders = 'content-type;host';
 
     url.searchParams.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256');
     url.searchParams.set('X-Amz-Credential', `${accessKeyId}/${scope}`);
@@ -93,10 +95,8 @@ window.S3Upload = {
       .join('&');
 
     const canonicalHeaders =
-      `cache-control:public, max-age=3600\n` +
       `content-type:${contentType}\n` +
-      `host:${url.host}\n` +
-      `x-amz-acl:public-read\n`;
+      `host:${url.host}\n`;
 
     const canonicalRequest = [
       'PUT',
@@ -156,12 +156,16 @@ window.S3Upload = {
     const config = await this.loadConfig();
     if (!config.accessKeyId || !config.bucket) return;
 
+    if (!config.endpoint) return;
+
+    let endpoint = config.endpoint;
+    if (!/^https?:\/\//.test(endpoint)) endpoint = 'https://' + endpoint;
+
     // Extract the key from the URL
     let key;
     if (config.publicUrlBase && objectUrl.startsWith(config.publicUrlBase)) {
       key = objectUrl.slice(config.publicUrlBase.length + 1);
     } else {
-      const endpoint = config.endpoint || `https://s3.${config.region || 'us-east-1'}.amazonaws.com`;
       const prefix = `${endpoint}/${config.bucket}/`;
       if (objectUrl.startsWith(prefix)) {
         key = objectUrl.slice(prefix.length);
@@ -170,7 +174,6 @@ window.S3Upload = {
       }
     }
 
-    const endpoint = config.endpoint || `https://s3.${config.region || 'us-east-1'}.amazonaws.com`;
     const region = config.region || 'us-east-1';
     const url = new URL(`${endpoint}/${config.bucket}/${key}`);
     const now = new Date();

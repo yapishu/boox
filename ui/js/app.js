@@ -32,7 +32,11 @@ function hexToUv(hex) {
     result = uvChars[Number(val & 31n)] + result;
     val >>= 5n;
   }
-  const groups = result.match(/.{1,5}/g) || ['0'];
+  // Group from the RIGHT in chunks of 5, so the short group is at the left
+  const groups = [];
+  for (let i = result.length; i > 0; i -= 5) {
+    groups.unshift(result.slice(Math.max(0, i - 5), i));
+  }
   groups[0] = groups[0].replace(/^0+/, '') || '0';
   return '0v' + groups.join('.');
 }
@@ -42,7 +46,11 @@ function randomUv() {
   const bytes = crypto.getRandomValues(new Uint8Array(20));
   let raw = '';
   for (const b of bytes) raw += uvChars[b & 31];
-  const groups = raw.match(/.{1,5}/g);
+  // Group from the RIGHT in chunks of 5, so the short group is at the left
+  const groups = [];
+  for (let i = raw.length; i > 0; i -= 5) {
+    groups.unshift(raw.slice(Math.max(0, i - 5), i));
+  }
   groups[0] = groups[0].replace(/^0+/, '') || '0';
   return '0v' + groups.join('.');
 }
@@ -1027,13 +1035,7 @@ window.App = {
 
         if (statusEl) statusEl.textContent = 'Saving...';
 
-        const uvChars = '0123456789abcdefghijklmnopqrstuv';
-        const bytes = crypto.getRandomValues(new Uint8Array(20));
-        let raw = '';
-        for (const b of bytes) raw += uvChars[b & 31];
-        const groups = raw.match(/.{1,5}/g);
-        groups[0] = groups[0].replace(/^0+/, '') || '0';
-        const bookId = '0v' + groups.join('.');
+        const bookId = randomUv();
 
         await BooxAPI.addBook(bookId, {
           title: item.title,

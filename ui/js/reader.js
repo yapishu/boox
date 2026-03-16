@@ -292,7 +292,10 @@ window.Reader = {
     const bytes = crypto.getRandomValues(new Uint8Array(20));
     let raw = '';
     for (const b of bytes) raw += uvChars[b & 31];
-    const groups = raw.match(/.{1,5}/g);
+    const groups = [];
+    for (let i = raw.length; i > 0; i -= 5) {
+      groups.unshift(raw.slice(Math.max(0, i - 5), i));
+    }
     groups[0] = groups[0].replace(/^0+/, '') || '0';
     return '0v' + groups.join('.');
   },
