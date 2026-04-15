@@ -41,6 +41,8 @@ window.S3Upload = {
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', presignedUrl);
       xhr.setRequestHeader('Content-Type', contentType);
+      xhr.setRequestHeader('Cache-Control', 'public, max-age=3600');
+      xhr.setRequestHeader('x-amz-acl', 'public-read');
 
       if (onProgress) {
         xhr.upload.onprogress = (e) => {
