@@ -219,6 +219,9 @@
         ::  bind our API endpoint
         [%pass /eyre/connect %arvo %e %connect [`/apps/boox/api dap.bowl]]
     ==
+  ::  clear eyre cache for bare app route so docket can re-serve /apps/boox
+  =/  cache-cards=(list card)
+    ~[[%pass /eyre/cache %arvo %e %set-response '/apps/boox' ~]]
   ::  backfill: HEAD s3 urls for books missing hashes
   =/  backfill-cards=(list card)
     |^
@@ -244,40 +247,40 @@
       ==
     --
   ?-  -.old
-      %10  [(weld cleanup backfill-cards) this(state old)]
+      %10  [:(weld cleanup cache-cards backfill-cards) this(state old)]
   ::
       %9
-    [(weld cleanup backfill-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old book-hashes.old ~ 'annas-archive.gl'])]
+    [:(weld cleanup cache-cards backfill-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old book-hashes.old ~ 'annas-archive.gl'])]
   ::
       %8
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old last-scrobble-upload.old ~ ~ 'annas-archive.gl'])]
   ::
       %7
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old last-scrobble.old %.y ~ ~ 'annas-archive.gl'])]
   ::
       %6
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old %.n %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old notations.old %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %5
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old ~ %.n %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old readable-colls.old ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %4
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old opds-password.old ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %3
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old opds-enabled.old '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %2
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old pending.old %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old pending.old %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %1
-    [cleanup this(state [%10 books.old positions.old book-order.old collections.old ~ %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old collections.old ~ %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ::
       %0
     =/  new-colls=(map @t collection:boox)
       %-  ~(run by collections.old)
       |=(bids=(set book-id:boox) `collection:boox`[bids '' %.n %.n ~])
-    [cleanup this(state [%10 books.old positions.old book-order.old new-colls ~ %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
+    [(weld cleanup cache-cards) this(state [%10 books.old positions.old book-order.old new-colls ~ %.n '' ~ ~ %.n %.y ~ ~ 'annas-archive.gl'])]
   ==
 ::
 ++  on-init
